@@ -45,6 +45,7 @@ export const DIMENSIONS = {
   goals:         { title: 'Life goals',             area: 'Extra: goals',          rule: 'similarity',    blurb: 'Where you want your life to go together.' },
   decisions:     { title: 'Decisions',              area: 'Extra: decisions',      rule: 'complementary', blurb: 'How you make choices together.' },
   dealbreakers:  { title: 'Non-negotiables',        area: 'Extra: non-negotiables', rule: 'dealbreaker',  blurb: 'Things you may not be able to compromise on.' },
+  intimacy:      { title: 'Intimacy',               area: 'Intimacy',              rule: 'complementary', blurb: 'How you think about closeness, desire, consent and comfort. Answer honestly, and use Not applicable for anything you would rather skip.' },
   reflection:    { title: 'Reflection',             area: 'Answer these too',      rule: 'none',          blurb: 'Open questions. Shared only after the reveal.' },
 };
 
@@ -272,6 +273,44 @@ export const QUESTIONS = [
   dealbreaker('deal.relocate', 'dealbreakers', 'Would you refuse to relocate for a partner?'),
   dealbreaker('deal.substances', 'dealbreakers', 'Would smoking or heavy drinking by a partner be a dealbreaker?'),
   dealbreaker('deal.trust', 'dealbreakers', 'Would a breach of trust, such as secret contact with an ex, be a dealbreaker?'),
+
+  // ---- Intimacy (16) — added later. Consent, desire and comfort, answered privately ----
+  scale('intimacy.frequency', 'intimacy', 'How often do you feel like being physically intimate with a partner?', 'Rarely', 'Very often', 'draft'),
+  choice('intimacy.initiate', 'intimacy', 'In a relationship, who usually starts physical intimacy?', [
+    { value: 'me', label: 'Usually me' },
+    { value: 'partner', label: 'Usually my partner' },
+    { value: 'both', label: 'We both start it' },
+    { value: 'depends', label: 'It depends on the moment' },
+  ], 'draft'),
+  likert('intimacy.talk', 'intimacy', 'I can talk openly with a partner about what I enjoy.', 'draft'),
+  likert('intimacy.pace', 'intimacy', 'I like to try new things together, at a pace we both agree on.', 'draft'),
+  likert('intimacy.consent', 'intimacy', 'A clear, enthusiastic yes matters to me more than going along to keep the peace.', 'draft'),
+  likert('intimacy.limits', 'intimacy', 'I know my limits and can say so without feeling guilty.', 'draft'),
+  scale('intimacy.stress', 'intimacy', 'How much does stress change your interest in intimacy?', 'Not at all', 'A great deal', 'draft'),
+  likert('intimacy.closeness', 'intimacy', 'Physical closeness helps me feel emotionally close to a partner.', 'draft'),
+  choice('intimacy.aftercare', 'intimacy', 'After being intimate, what helps you feel most connected?', [
+    { value: 'talk', label: 'Talking together' },
+    { value: 'cuddle', label: 'Cuddling or holding each other' },
+    { value: 'quiet', label: 'Quiet time, side by side' },
+    { value: 'space', label: 'Some space for a while' },
+  ], 'draft'),
+  choice('intimacy.protection', 'intimacy', 'How do you feel about contraception and protection?', [
+    { value: 'agree', label: 'We agree on it together' },
+    { value: 'discuss', label: 'I like to discuss it at the start' },
+    { value: 'lead', label: 'I usually take the lead on it' },
+    { value: 'unsure', label: 'I am not sure yet' },
+  ], 'draft'),
+  scale('intimacy.exclusivity', 'intimacy', 'How important is sexual exclusivity to you?', 'Not very', 'Essential', 'draft'),
+  likert('intimacy.curious', 'intimacy', 'I ask my partner about their preferences, and I am curious about them.', 'draft'),
+  choice('intimacy.health', 'intimacy', 'Would you talk about sexual health and testing before becoming intimate?', [
+    { value: 'always', label: 'Yes, always' },
+    { value: 'committed', label: 'Yes, once we are committed' },
+    { value: 'asked', label: 'Only if one of us asks' },
+    { value: 'notneeded', label: 'I do not think it is needed' },
+  ], 'draft'),
+  likert('intimacy.past', 'intimacy', 'I can talk about past experiences when it matters to a partner.', 'draft'),
+  likert('intimacy.reassure', 'intimacy', 'I need reassurance that I am desired, not only that I am loved.', 'draft'),
+  scale('intimacy.comfort', 'intimacy', 'How comfortable are you talking about sex with a partner?', 'Very uncomfortable', 'Completely at ease', 'draft'),
 
   // ---- Reflection (10) — open text, shared only after the reveal ----
   text('ref.great_week', 'What does a great week in your life look like right now?'),
