@@ -108,9 +108,56 @@ function friendlyError(err) {
 }
 
 // ---------- screens ----------
+// Unanswered scored questions in a bank, for people who already have answers in the new area.
+function missingFor(data, bank) {
+  const mine = data.mine[bank] || {};
+  return scored(bank).filter((q) => mine[q.id] === undefined).length;
+}
+
+// An open dialog while any new questions are unanswered. Gone once everything is answered.
+// Dismissing it hides it for this browser session only; answers stay editable at any time.
+function maybeNewQuestionsDialog(data) {
+  const started = ['couple', 'friendship'].some((b) => data.mine[b] && Object.keys(data.mine[b]).length > 0);
+  if (!started) return;
+  const missing = { couple: missingFor(data, 'couple'), friendship: missingFor(data, 'friendship') };
+  if (missing.couple + missing.friendship === 0) return;
+  try { if (sessionStorage.getItem('compat.newq.dismissed') === '1') return; } catch { /* storage off */ }
+  document.querySelector('[data-newq-dialog]')?.remove();
+
+  const banks = ['couple', 'friendship'].filter((b) => missing[b] > 0);
+  const label = { couple: 'couple', friendship: 'friendship' };
+  const dlg = document.createElement('div');
+  dlg.setAttribute('data-newq-dialog', '');
+  dlg.style.cssText = 'position:fixed;inset:0;background:rgba(20,12,16,.55);display:flex;align-items:center;justify-content:center;padding:16px;z-index:50';
+  dlg.innerHTML = `
+    <div role="dialog" aria-modal="true" aria-labelledby="newq-title" style="background:var(--surface);color:var(--ink);border-radius:18px;max-width:420px;width:100%;padding:24px;box-shadow:var(--shadow)">
+      <h2 id="newq-title" style="margin:0 0 8px">There are new questions</h2>
+      <p style="margin:0 0 16px;color:var(--ink-soft)">${banks.map((b) => `${missing[b]} new ${label[b]} question${missing[b] > 1 ? 's' : ''}`).join(' and ')} waiting. Answer them now, or later. You can change any answer at any time.</p>
+      <div class="btn-row stack">
+        ${banks.map((b) => `<button class="btn btn-primary" type="button" data-answer="${b}">Answer ${label[b]} questions</button>`).join('')}
+        <button class="btn btn-ghost" type="button" data-later>Later</button>
+      </div>
+    </div>`;
+  document.body.appendChild(dlg);
+  const first = dlg.querySelector('[data-answer]');
+  first?.focus();
+  dlg.querySelectorAll('[data-answer]').forEach((b) => b.addEventListener('click', () => {
+    dlg.remove();
+    showEditor(b.dataset.answer);
+  }));
+  dlg.querySelector('[data-later]').addEventListener('click', () => {
+    try { sessionStorage.setItem('compat.newq.dismissed', '1'); } catch { /* storage off */ }
+    dlg.remove();
+  });
+  dlg.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') dlg.querySelector('[data-later]').click();
+  });
+}
+
 export async function showHome(extra = {}) {
   const data = await load();
   renderHome(ctx.el, homeOptions(data, extra));
+  maybeNewQuestionsDialog(data);
   // The psychology guide, and older sessions from before the new profile model, stay reachable.
   ctx.el.insertAdjacentHTML('beforeend',
     '<p style="text-align:center;margin:16px 0;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">'
