@@ -17,8 +17,8 @@ export function cleanCode(raw) {
 export const linkFor = (code) => `${location.origin}${location.pathname}?join=${code}`;
 
 // Creator: the database makes the code, so retries and collisions are handled server-side.
-export async function createSession(_uid, name, gender) {
-  const { data, error } = await supabase.rpc('create_session', { p_name: name, p_gender: gender });
+export async function createSession(_uid, name, gender, kind = 'couple') {
+  const { data, error } = await supabase.rpc('create_session', { p_name: name, p_gender: gender, p_kind: kind });
   if (error) throw error;
   return data;
 }
@@ -45,7 +45,7 @@ export async function saveProfile(uid, { display_name, gender }) {
 export async function listMySessions(uid) {
   const { data, error } = await supabase
     .from('sessions')
-    .select('code, status, member_a, member_a_name, member_a_gender, member_b, member_b_name, member_b_gender, created_at')
+    .select('code, status, kind, member_a, member_a_name, member_a_gender, member_b, member_b_name, member_b_gender, created_at')
     .order('created_at', { ascending: false });
   if (error) throw error;
   return (data || []).map((row) => {
@@ -53,6 +53,7 @@ export async function listMySessions(uid) {
     return {
       code: row.code,
       status: row.status,
+      kind: row.kind || 'couple',
       role: isA ? 'A' : 'B',
       myName: isA ? row.member_a_name : row.member_b_name,
       myGender: isA ? row.member_a_gender : row.member_b_gender,
@@ -91,7 +92,7 @@ function toSession(row) {
     members[row.member_b] = { name: row.member_b_name, role: 'B' };
     memberUids.push(row.member_b);
   }
-  return { status: row.status, memberUids, members };
+  return { status: row.status, memberUids, members, kind: row.kind || 'couple' };
 }
 
 // Live updates. Calls back with a session, null (not found, or not a member), or { error }.

@@ -78,7 +78,7 @@ const ICON = {
 };
 
 // ---------- small pieces ----------
-function ring(score, { large = false, toneName, label, caption = '' } = {}) {
+function ring(score, { large = false, toneName, label, caption = '', empty = '♡' } = {}) {
   const value = pct(score);
   const t = tone(toneName || scoreTone(value));
   const aria = value === null ? `${label}: no score` : `${label}: ${value} out of 100`;
@@ -86,7 +86,7 @@ function ring(score, { large = false, toneName, label, caption = '' } = {}) {
     ? ''
     : `<circle class="rv-ring-val" cx="60" cy="60" r="52" pathLength="100" style="--rv-val:${value}"></circle>`;
   const centre = value === null
-    ? '<span class="rv-ring-empty">♡</span>'
+    ? `<span class="rv-ring-empty">${esc(empty)}</span>`
     : `<span class="rv-ring-num"><span${large ? ` data-rv-count="${value}"` : ''}>${value}</span>${caption ? `<small>${esc(caption)}</small>` : ''}</span>`;
   return `<div class="rv-ring ${large ? 'rv-ring--lg ' : ''}${t}" role="img" aria-label="${esc(aria)}">
     <svg viewBox="0 0 120 120" aria-hidden="true" focusable="false">
@@ -152,7 +152,8 @@ export function renderReveal(el, report, opts = {}) {
   const r = report || {};
   const o = opts || {};
   const me = str(o.myName) || 'You';
-  const them = str(o.partnerName) || 'Your partner';
+  const deep = r.deep && typeof r.deep === 'object' ? r.deep : null;
+  const them = str(o.partnerName) || (deep ? 'Your friend' : 'Your partner');
   const areas = arr(r.areas).filter(Boolean);
   const reflections = arr(r.reflections).filter((x) => x && (str(x.mine) || str(x.theirs)));
   const state = { view: 'overview', index: 0 };
@@ -248,6 +249,113 @@ export function renderReveal(el, report, opts = {}) {
     </section>`;
   }
 
+  // ----- deep analysis (friendship sessions: only when report.deep exists) -----
+  const TRAITS = [
+    ['closure', 'Wants clear answers'],
+    ['evidence', 'Goes by evidence'],
+    ['openness', 'Open to new ideas'],
+    ['flexibility', 'Flexible with plans'],
+  ];
+
+  function traitBar(label, value) {
+    const ok = isNum(value);
+    const v = ok ? clamp(value, 1, 5) : null;
+    const word = !ok ? 'Not enough answers' : v < 2.34 ? 'A little' : v < 3.67 ? 'Somewhat' : 'Strongly';
+    const shown = ok ? String(Math.round(v * 10) / 10) : '';
+    const aria = ok ? `${label}: ${shown} out of 5, ${word.toLowerCase()}` : `${label}: not enough answers`;
+    const width = ok ? Math.max(Math.round(((v - 1) / 4) * 100), 4) : 0;
+    return `<div class="rv-trait${ok ? '' : ' rv-trait--empty'}" role="img" aria-label="${esc(aria)}">
+      <div class="rv-trait-top"><span>${esc(label)}</span><span>${esc(word)}</span></div>
+      <div class="bar"><span style="--rv-w:${width}%"></span></div>
+    </div>`;
+  }
+
+  function alignBlock(a, label) {
+    const d = a && typeof a === 'object' ? a : {};
+    const value = pct(d.score);
+    if (value === null && !str(d.label) && !str(d.text)) return '';
+    const t = scoreTone(value);
+    return `<div class="rv-align ${tone(t)}">
+      ${ring(d.score, { toneName: t, label, empty: '—' })}
+      <div class="rv-align-body">
+        ${str(d.label) ? `<p class="rv-align-label">${esc(d.label)}</p>` : ''}
+        ${str(d.text) ? `<p class="rv-align-text">${esc(d.text)}</p>` : ''}
+      </div>
+    </div>`;
+  }
+
+  function thinkingCard(i) {
+    const t = deep.thinking;
+    if (!t || typeof t !== 'object') return '';
+    const person = (who, cls, data) => {
+      const d = data && typeof data === 'object' ? data : {};
+      return `<div class="rv-person rv-think ${cls}">
+        <div class="rv-who ${cls}">${esc(who)}</div>
+        ${TRAITS.map(([key, label]) => traitBar(label, d[key])).join('')}
+      </div>`;
+    };
+    return `<section class="card rv-deep" style="--i:${i}">
+      <h2>How you think</h2>
+      <p class="rv-sub">The way each of you tends to weigh things up and make up your mind.</p>
+      ${alignBlock(t.alignment, 'Thinking alignment')}
+      <div class="rv-duo">${person(me, 'rv-me', t.mine)}${person(them, 'rv-them', t.theirs)}</div>
+    </section>`;
+  }
+
+  function comfortCard(i) {
+    const c = deep.comfort;
+    if (!c || typeof c !== 'object') return '';
+    const value = pct(c.score);
+    const t = scoreTone(value);
+    const label = str(c.label) || (value === null ? 'Not enough answers yet' : 'Comfort');
+    const aria = value === null ? 'Comfort: no score' : `Comfort: ${value} out of 100, ${label}`;
+    return `<section class="card rv-deep" style="--i:${i}">
+      <h2>Is this friend comfortable for you?</h2>
+      <p class="rv-sub">How easy it tends to feel to be yourself around each other.</p>
+      <div class="rv-comfort ${tone(t)}" role="img" aria-label="${esc(aria)}">
+        <div class="rv-comfort-top"><span class="rv-comfort-label">${esc(label)}</span><span class="rv-comfort-num">${value === null ? '—' : `${value}<small> / 100</small>`}</span></div>
+        <div class="bar"><span style="--rv-w:${value === null ? 0 : Math.max(value, 3)}%"></span></div>
+        <div class="rv-comfort-scale" aria-hidden="true"><span>Takes some effort</span><span>Easy company</span></div>
+      </div>
+      ${str(c.text) ? `<p class="rv-deep-text">${esc(c.text)}</p>` : ''}
+      ${flagList(c.signals)}
+    </section>`;
+  }
+
+  function valuesCard(i) {
+    const v = deep.values;
+    if (!v || typeof v !== 'object') return '';
+    const list = (title, items, toneName, icon, blank) => {
+      const rows = arr(items).map(str).filter(Boolean);
+      return `<div class="rv-values-col">
+        <h3>${esc(title)}</h3>
+        ${rows.length
+          ? `<ul class="rv-list">${rows.map((x) => `<li><span class="rv-mark ${tone(toneName)}" aria-hidden="true">${icon}</span><span>${esc(x)}</span></li>`).join('')}</ul>`
+          : `<p class="rv-gentle">${esc(blank)}</p>`}
+      </div>`;
+    };
+    return `<section class="card rv-deep" style="--i:${i}">
+      <h2>Values</h2>
+      <p class="rv-sub">What matters most to each of you, and how closely it lines up.</p>
+      ${alignBlock(v.alignment, 'Values alignment')}
+      <div class="rv-values">
+        ${list('What you share', v.sharedCore, 'sage', ICON.check, 'Nothing stood out as clearly shared yet. That can change as you talk.')}
+        ${list('Where you differ', v.differences, 'amber', ICON.chat, 'No clear differences showed up here.')}
+      </div>
+    </section>`;
+  }
+
+  function narrativeCard(i) {
+    const paras = arr(deep.narrative).map(str).filter(Boolean);
+    if (!paras.length) return '';
+    return `<section class="card rv-deep rv-story" style="--i:${i}">
+      <div class="area-tag">Let's talk it through</div>
+      <h2>What this means for you both</h2>
+      <div class="rv-prose">${paras.map((p) => `<p>${esc(p)}</p>`).join('')}</div>
+      <p class="ref-note">These are tendencies to explore together, not a verdict.</p>
+    </section>`;
+  }
+
   function indexCard(i) {
     if (!areas.length) return '';
     return `<section class="card" style="--i:${i}">
@@ -266,9 +374,17 @@ export function renderReveal(el, report, opts = {}) {
       bulletCard(i + 1, 'Worth talking through', 'Not problems. Just good conversations waiting to happen.', r.topics, 'amber', ICON.chat),
     ].filter(Boolean);
     i += parts.length;
-    for (const build of [attachmentCard, conflictCard, dealbreakerCard, indexCard]) {
+    const deepBuilders = deep ? [thinkingCard, comfortCard, valuesCard, narrativeCard] : [];
+    let deepLabelled = false;
+    for (const build of [attachmentCard, conflictCard, dealbreakerCard, ...deepBuilders, indexCard]) {
       const html = build(i);
-      if (html) { parts.push(html); i += 1; }
+      if (!html) continue;
+      if (!deepLabelled && deepBuilders.includes(build)) {
+        parts.push('<h2 class="rv-section-label rv-deep-label">A deeper look</h2>');
+        deepLabelled = true;
+      }
+      parts.push(html);
+      i += 1;
     }
     return heroCard() + parts.join('');
   }

@@ -301,7 +301,11 @@ export function renderDashboard(el, { profile, sessions, onNew, onOpen, onJoinLi
             ${genderText ? `<p>${genderText}</p>` : ''}
           </div>
         </header>
-        <button class="btn btn-primary" type="button" data-new>Start a new session</button>
+        <p class="ac-kind-label" id="ac-kind-h">Start a new session</p>
+        <div class="ac-kinds" role="group" aria-labelledby="ac-kind-h">
+          <button class="btn btn-primary" type="button" data-new="couple">A couple</button>
+          <button class="btn btn-ghost" type="button" data-new="friendship">A friendship</button>
+        </div>
         <p class="ac-error" data-new-error role="alert" aria-live="assertive" style="margin-top:12px"></p>
         <div class="ac-or" aria-hidden="true">or</div>
         <form class="ac-join" novalidate>
@@ -331,11 +335,12 @@ export function renderDashboard(el, { profile, sessions, onNew, onOpen, onJoinLi
       </nav>
     </div>`;
 
-  const newBtn = el.querySelector('[data-new]');
   const newError = el.querySelector('[data-new-error]');
-  newBtn.addEventListener('click', () => {
-    if (newBtn.disabled) return;
-    runBusy(newBtn, 'Starting…', () => onNew?.(), newError);
+  el.querySelectorAll('[data-new]').forEach((newBtn) => {
+    newBtn.addEventListener('click', () => {
+      if (newBtn.disabled) return;
+      runBusy(newBtn, 'Starting…', () => onNew?.(newBtn.dataset.new), newError);
+    });
   });
 
   const joinForm = el.querySelector('.ac-join');

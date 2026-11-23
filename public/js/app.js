@@ -1,15 +1,26 @@
 // App shell: sign-in, profile, dashboard, create / join, questionnaire, submit and reveal (Supabase).
-import { QUESTIONS, DIMENSIONS, LIKERT, validateQuestions } from './questions.js';
+import { QUESTIONS as COUPLE_Q, DIMENSIONS as COUPLE_D, LIKERT, validateQuestions } from './questions.js';
+import { FRIEND_QUESTIONS, FRIEND_DIMENSIONS, validateFriendQuestions } from './friend-questions.js';
+import { computeFriendshipReport } from './friend-psychology.js';
 import { CONFIG_READY } from './config.js';
 import { ensureAuth, currentUid, sendMagicLink, signOut } from './supabase.js';
 import { createSession, previewSession, joinSession, watchSession, cleanCode, linkFor,
   loadMyAnswers, saveMyAnswers, submitAnswers, loadAllAnswers,
   getProfile, saveProfile, listMySessions } from './session.js';
 import { computeReport } from './psychology.js';
+
 import { renderReveal, renderRevealWaiting } from './reveal.js';
 import { renderLogin, renderCheckEmail, renderProfile, renderDashboard } from './account.js';
 
 validateQuestions();
+validateFriendQuestions();
+
+// The question bank follows the session type. Everything below reads through these accessors.
+let activeKind = 'couple';
+const QS = () => (activeKind === 'friendship' ? FRIEND_QUESTIONS : COUPLE_Q);
+const DS = () => (activeKind === 'friendship' ? FRIEND_DIMENSIONS : COUPLE_D);
+const blockCache = {};
+const BL = () => (blockCache[activeKind] ||= areaBlocks());
 
 const POINTER_KEY = 'compat.session.v1';    // the session this device last opened: { code, role }
 const PENDING_KEY = 'compat.pendingJoin.v1'; // a join link waiting for sign-in to finish
@@ -55,7 +66,7 @@ function loadDraft(code) {
     if (!raw) return;
     const d = JSON.parse(raw);
     state.answers = d.answers || {};
-    state.index = Math.min(d.index || 0, QUESTIONS.length);
+    state.index = Math.min(d.index || 0, QS().length);
     state.introSeen = d.introSeen || {};
   } catch { /* corrupt or blocked: start fresh */ }
 }
@@ -115,8 +126,8 @@ function flashSaved() {
 
 // ---------- helpers ----------
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const scoredTotal = () => QUESTIONS.filter((q) => q.type !== 'text').length;
-const scoredAnswered = () => QUESTIONS.filter((q) => q.type !== 'text' && state.answers[q.id] !== undefined).length;
+const scoredTotal = () => QS().filter((q) => q.type !== 'text').length;
+const scoredAnswered = () => QS().filter((q) => q.type !== 'text' && state.answers[q.id] !== undefined).length;
 // The creator sees an invite banner on the questionnaire screens until the partner joins.
 const bannerNeeded = () => state.role === 'A' && !state.partnerName && !!state.sessionCode
   && ['questions', 'done', 'submitted'].includes(state.screen);
@@ -138,15 +149,14 @@ document.addEventListener('click', (e) => {
 
 function areaBlocks() {
   const blocks = [];
-  QUESTIONS.forEach((q, i) => {
+  QS().forEach((q, i) => {
     const last = blocks[blocks.length - 1];
     if (last && last.dimension === q.dimension) last.items.push(i);
     else blocks.push({ dimension: q.dimension, items: [i] });
   });
   return blocks;
 }
-const BLOCKS = areaBlocks();
-const blockOf = (i) => BLOCKS.find((b) => b.items.includes(i));
+const blockOf = (i) => BL().find((b) => b.items.includes(i));
 
 function showError(message, { action = 'Start again', onAction } = {}) {
   setHTML(`
@@ -261,9 +271,9 @@ async function renderDashboardScreen() {
   });
 }
 
-async function startNewSession() {
+async function startNewSession(kind = 'couple') {
   try {
-    const code = await createSession(currentUid(), state.profile.display_name, state.profile.gender);
+    const code = await createSession(currentUid(), state.profile.display_name, state.profile.gender, kind);
     savePointer(code, 'A');
     attach(code);
   } catch (err) {
@@ -351,8 +361,9 @@ function onSession(code, s) {
   // The creator can answer straight away. Later snapshots do not reset progress.
   if (!state.started) {
     state.started = true;
+    activeKind = s.kind === 'friendship' ? 'friendship' : 'couple';
     loadDraft(code);
-    state.screen = state.index >= QUESTIONS.length ? 'done' : 'questions';
+    state.screen = state.index >= QS().length ? 'done' : 'questions';
     render();
     hydrateFromServer(code);
     return;
@@ -376,7 +387,10 @@ async function startReveal() {
     const mine = rows.find((r) => r.user_id === uid);
     const theirs = rows.find((r) => r.user_id !== uid);
     if (!mine || !theirs) throw new Error('answers not visible yet');
-    const report = computeReport(mine.answers || {}, theirs.answers || {}, { myRole: state.role });
+    const reportOpts = { myRole: state.role, myName: state.myName, partnerName: state.partnerName || 'your friend' };
+    const report = activeKind === 'friendship'
+      ? computeFriendshipReport(mine.answers || {}, theirs.answers || {}, reportOpts)
+      : computeReport(mine.answers || {}, theirs.answers || {}, reportOpts);
     renderReveal(app, report, {
       myName: state.myName,
       partnerName: state.partnerName || 'Your partner',
@@ -407,12 +421,12 @@ function leaveSession() {
 
 // ---------- questionnaire ----------
 function renderIntro(block) {
-  const d = DIMENSIONS[block.dimension];
+  const d = DS()[block.dimension];
   const count = block.items.length;
   setHTML(`
     <section class="card area-intro">
       <div class="big" aria-hidden="true">${areaIcon(block.dimension)}</div>
-      <div class="area-tag">Area ${BLOCKS.indexOf(block) + 1} of ${BLOCKS.length}</div>
+      <div class="area-tag">Area ${BL().indexOf(block) + 1} of ${BL().length}</div>
       <h2>${esc(d.title)}</h2>
       <p class="lead">${esc(d.blurb)}</p>
       <p class="hint">${count} question${count > 1 ? 's' : ''} in this area.</p>
@@ -427,20 +441,20 @@ function renderIntro(block) {
 }
 
 function renderQuestion() {
-  const q = QUESTIONS[state.index];
+  const q = QS()[state.index];
   const block = blockOf(state.index);
-  const d = DIMENSIONS[q.dimension];
-  const pct = Math.round((state.index / QUESTIONS.length) * 100);
-  const chips = BLOCKS.map((b, bi) => {
-    const done = b.items.every((i) => state.answers[QUESTIONS[i].id] !== undefined || QUESTIONS[i].type === 'text');
+  const d = DS()[q.dimension];
+  const pct = Math.round((state.index / QS().length) * 100);
+  const chips = BL().map((b, bi) => {
+    const done = b.items.every((i) => state.answers[QS()[i].id] !== undefined || QS()[i].type === 'text');
     const cls = b === block ? 'current' : done ? 'done' : '';
-    return `<span class="chip ${cls}">${bi + 1}. ${esc(DIMENSIONS[b.dimension].title)}</span>`;
+    return `<span class="chip ${cls}">${bi + 1}. ${esc(DS()[b.dimension].title)}</span>`;
   }).join('');
 
   setHTML(`
     <section class="card" aria-live="polite">
       <div class="progress">
-        <div class="progress-meta"><span>Question ${state.index + 1} of ${QUESTIONS.length}</span><span>${pct}%</span></div>
+        <div class="progress-meta"><span>Question ${state.index + 1} of ${QS().length}</span><span>${pct}%</span></div>
         <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><span style="width:${pct}%"></span></div>
       </div>
       <div class="area-chips">${chips}</div>
@@ -449,7 +463,7 @@ function renderQuestion() {
       ${renderInput(q)}
       <div class="btn-row">
         <button class="btn btn-ghost" id="back" ${state.index === 0 ? 'disabled' : ''}>Back</button>
-        <button class="btn btn-primary" id="next">${state.index === QUESTIONS.length - 1 ? 'Finish' : 'Next'}</button>
+        <button class="btn btn-primary" id="next">${state.index === QS().length - 1 ? 'Finish' : 'Next'}</button>
       </div>
       <p class="kbd-help">Keyboard: 1–5 or 1–4 to choose, Enter for next, Backspace for back.</p>
     </section>`);
@@ -510,7 +524,7 @@ function choose(q, raw) {
     el.setAttribute('aria-checked', String(el.dataset.value === String(raw)));
   });
   updateNextEnabled(q);
-  setTimeout(() => { if (state.index < QUESTIONS.length - 1 && state.screen === 'questions') goNext(); }, 220);
+  setTimeout(() => { if (state.index < QS().length - 1 && state.screen === 'questions') goNext(); }, 220);
 }
 
 function updateNextEnabled(q) {
@@ -519,9 +533,9 @@ function updateNextEnabled(q) {
 }
 
 function goNext() {
-  const q = QUESTIONS[state.index];
+  const q = QS()[state.index];
   if (q.type !== 'text' && state.answers[q.id] === undefined) return;
-  if (state.index >= QUESTIONS.length - 1) {
+  if (state.index >= QS().length - 1) {
     state.screen = 'done';
     saveDraft();
     return render();
@@ -624,7 +638,7 @@ function render() {
 document.addEventListener('keydown', (e) => {
   if (state.screen !== 'questions') return;
   if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
-  const q = QUESTIONS[state.index];
+  const q = QS()[state.index];
   if (!q) return;
   if (e.key === 'Enter') { goNext(); return; }
   if (e.key === 'Backspace') { goBack(); return; }

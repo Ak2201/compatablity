@@ -126,6 +126,56 @@
 .rv-deal-ans { font-size: 13.5px; color: var(--ink-soft); margin-top: 6px; }
 .rv-deal-ans b { color: var(--ink); font-weight: 650; }
 
+/* ---------- Deep analysis (friendship sessions) ---------- */
+.rv .rv-deep-label { margin: 10px 2px -6px; }
+.rv-deep h3 { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); }
+.rv-deep-text { margin: 14px 0 0; max-width: 62ch; line-height: 1.6; }
+
+.rv-align {
+  display: flex; gap: 16px; align-items: center; margin-top: 4px;
+  background: var(--surface-2); border-radius: var(--radius-sm); padding: 14px 16px;
+}
+.rv-align .rv-ring-track { stroke: color-mix(in srgb, var(--ink-soft) 16%, transparent); }
+.rv-align-body { min-width: 0; }
+.rv-align-label { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.25; color: var(--rv-tone, var(--ink)); }
+.rv-align-text { margin: 4px 0 0; font-size: 14.5px; line-height: 1.5; color: var(--ink-soft); }
+
+.rv-think.rv-me { --rv-trait: var(--accent); }
+.rv-think.rv-them { --rv-trait: var(--sage); }
+.rv-trait { margin-top: 12px; }
+.rv-trait-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 0 8px; font-size: 13px; line-height: 1.35; }
+.rv-trait-top span:first-child { font-weight: 600; }
+.rv-trait-top span:last-child { color: var(--ink-soft); font-size: 12.5px; }
+.rv-trait .bar { margin-top: 6px; height: 7px; background: color-mix(in srgb, var(--ink-soft) 16%, transparent); }
+.rv-trait .bar > span {
+  background: var(--rv-trait, var(--accent)); width: var(--rv-w, 0%); border-radius: 999px;
+  transform-origin: left center; animation: rv-grow .9s var(--rv-ease) .25s both;
+}
+.rv-trait--empty .rv-trait-top span:last-child { font-style: italic; }
+
+.rv-comfort { margin-top: 4px; }
+.rv-comfort-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 12px; }
+.rv-comfort-label { font-size: 20px; font-weight: 700; line-height: 1.25; color: var(--rv-tone, var(--ink)); }
+.rv-comfort-num { font-size: 20px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.rv-comfort-num small { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); }
+.rv-comfort .bar { margin-top: 10px; height: 12px; }
+.rv-comfort .bar > span {
+  background: var(--rv-tone, var(--accent)); width: var(--rv-w, 0%); border-radius: 999px;
+  transform-origin: left center; animation: rv-grow 1s var(--rv-ease) .25s both;
+}
+.rv-comfort-scale { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; font-size: 12px; color: var(--ink-soft); }
+
+.rv-values { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 24px; margin-top: 18px; }
+.rv-values-col { min-width: 0; }
+.rv-values .rv-list { margin-top: 10px; font-size: 15px; }
+.rv-gentle { margin: 10px 0 0; font-size: 14.5px; color: var(--ink-soft); font-style: italic; }
+
+.rv .rv-story h2 { font-size: 22px; letter-spacing: -.01em; margin: 6px 0 0; }
+.rv-prose { max-width: 62ch; margin-top: 14px; font-size: 16.5px; line-height: 1.75; }
+.rv-prose p { margin: 0 0 1em; }
+.rv-prose p:last-child { margin-bottom: 0; }
+.rv-prose p:first-child { font-size: 18px; line-height: 1.6; font-weight: 500; }
+
 /* ---------- Area index (overview) ---------- */
 .rv-index { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
 .rv-index-btn {
@@ -279,11 +329,18 @@
   .rv-style { font-size: 16px; }
   .rv .rv-item { padding: 16px; }
   .rv-answer { padding: 10px; }
+  .rv-align { padding: 12px; gap: 12px; }
+  .rv-values { grid-template-columns: 1fr; }
+  .rv .rv-story h2 { font-size: 20px; }
+  .rv-prose { font-size: 16px; line-height: 1.7; }
+  .rv-prose p:first-child { font-size: 17px; }
+  .rv-comfort-label, .rv-comfort-num { font-size: 18px; }
 }
 
 /* ---------- Reduced motion ---------- */
 @media (prefers-reduced-motion: reduce) {
   .rv .card, .rv-prompt, .rv-ring-val, .rv-meter .bar > span,
+  .rv-trait .bar > span, .rv-comfort .bar > span,
   .rv-pulse i, .rv-skel span { animation: none !important; }
   .rv-chip, .rv-index-btn, .rv-pager .btn svg { transition: none; }
 }
