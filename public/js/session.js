@@ -110,6 +110,16 @@ export async function saveMyAnswers(code, uid, answers) {
   if (error) throw error;
 }
 
+// Both rows. Only works once the session is revealed: before that, RLS returns just your own row.
+export async function loadAllAnswers(code) {
+  const { data, error } = await supabase
+    .from('answers')
+    .select('user_id, answers')
+    .eq('session_code', code);
+  if (error) throw error;
+  return data || [];
+}
+
 // Final submit. Locks your row. Returns 'submitted', or 'locked' when both people have now locked.
 export async function submitAnswers(code, answers) {
   const { data, error } = await supabase.rpc('submit_answers', { p_code: code, p_answers: answers });

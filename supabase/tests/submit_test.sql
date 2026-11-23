@@ -74,9 +74,15 @@ begin
   perform pg_temp.as_user(b);
   perform pg_temp.check_eq('gate: partner cannot read unlocked-by-reveal answers', (select count(*)::int from public.answers where user_id = a), 0);
   r := public.submit_answers(v_code, '{"comm.open": 2}');
-  perform pg_temp.check_eq('submit: second person submits', r, 'locked');
-  perform pg_temp.check_eq('submit: both locked moves session to locked',
-    (select status from public.sessions where code = v_code), 'locked');
+  perform pg_temp.check_eq('submit: second person submits', r, 'revealed');
+  perform pg_temp.check_eq('submit: both locked moves session to revealed',
+    (select status from public.sessions where code = v_code), 'revealed');
+
+  -- After reveal, the partner can read the other person's answers row, and a stranger cannot.
+  perform pg_temp.as_user(b);
+  perform pg_temp.check_eq('reveal: partner reads the other answers row', (select count(*)::int from public.answers where user_id = a), 1);
+  perform pg_temp.as_user(c);
+  perform pg_temp.check_eq('reveal: stranger reads no answers rows', (select count(*)::int from public.answers where session_code = v_code), 0);
 
   -- Stranger cannot submit.
   perform pg_temp.as_user(c);

@@ -3,7 +3,9 @@ import { QUESTIONS, DIMENSIONS, LIKERT, validateQuestions } from './questions.js
 import { CONFIG_READY } from './config.js';
 import { ensureAuth, currentUid } from './supabase.js';
 import { createSession, previewSession, joinSession, watchSession, cleanCode, linkFor,
-  loadMyAnswers, saveMyAnswers, submitAnswers } from './session.js';
+  loadMyAnswers, saveMyAnswers, submitAnswers, loadAllAnswers } from './session.js';
+import { computeReport } from './psychology.js';
+import { renderReveal, renderRevealWaiting } from './reveal.js';
 
 validateQuestions();
 
@@ -88,6 +90,7 @@ async function hydrateFromServer(code) {
     if (row.locked) {
       state.locked = true;
       state.screen = 'submitted';
+      if (state.sessionStatus === 'revealed') return startReveal();
       render();
     }
   } catch (err) {
@@ -317,8 +320,47 @@ function onSession(code, s) {
     hydrateFromServer(code);
     return;
   }
-  // Partner status changed while you are on the submitted screen.
+  // Partner status changed. Once both have submitted, the session is revealed.
+  if (s.status === 'revealed' && state.screen !== 'reveal' && state.locked) return startReveal();
   if (state.screen === 'submitted') renderSubmitted();
+}
+
+// ---------- reveal ----------
+async function startReveal() {
+  state.screen = 'reveal';
+  renderRevealWaiting(app, {});
+  try {
+    const rows = await loadAllAnswers(state.sessionCode);
+    const uid = currentUid();
+    const mine = rows.find((r) => r.user_id === uid);
+    const theirs = rows.find((r) => r.user_id !== uid);
+    if (!mine || !theirs) throw new Error('answers not visible yet');
+    const report = computeReport(mine.answers || {}, theirs.answers || {}, { myRole: state.role });
+    renderReveal(app, report, {
+      myName: state.myName,
+      partnerName: state.partnerName || 'Your partner',
+      onLeave: leaveSession,
+    });
+  } catch (err) {
+    console.error(err);
+    state.screen = 'submitted';
+    saveState.textContent = 'Could not load the reveal yet. Retrying…';
+    setTimeout(() => { if (state.sessionStatus === 'revealed') startReveal(); }, 3000);
+  }
+}
+
+function leaveSession() {
+  if (state.unsub) state.unsub();
+  state.unsub = null;
+  const code = state.sessionCode;
+  forgetPointer();
+  try { localStorage.removeItem(draftKey(code)); } catch { /* storage off */ }
+  state.started = false;
+  state.locked = false;
+  state.answers = {};
+  state.index = 0;
+  state.sessionCode = null;
+  renderLanding('You left the session on this device. Your partner can still see it on their device.');
 }
 
 // ---------- questionnaire ----------
@@ -517,7 +559,9 @@ function renderSubmitted() {
         : `Waiting for ${esc(partner)} to submit. Their answers stay hidden until you both have finished.`}</p>
       <div class="stat">${scoredAnswered()} of ${scoredTotal()} scored questions submitted</div>
       <p class="ref-note">Nothing you can change now. Keep this page open, or come back on this device.</p>
+      <div class="btn-row"><button class="btn btn-ghost" id="leave">Leave this session on this device</button></div>
     </section>`);
+  document.getElementById('leave')?.addEventListener('click', leaveSession);
 }
 
 function areaIcon(dimension) {
@@ -526,6 +570,7 @@ function areaIcon(dimension) {
 
 // ---------- render loop ----------
 function render() {
+  if (state.screen === 'reveal') return; // the reveal renders itself
   if (state.screen === 'submitted') return renderSubmitted();
   if (state.screen === 'done') return renderDone();
   const block = blockOf(state.index);
