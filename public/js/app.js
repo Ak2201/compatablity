@@ -1,26 +1,30 @@
-// App shell: create / join / waiting screens (Supabase), then the questionnaire.
+// App shell: sign-in, profile, dashboard, create / join, questionnaire, submit and reveal (Supabase).
 import { QUESTIONS, DIMENSIONS, LIKERT, validateQuestions } from './questions.js';
 import { CONFIG_READY } from './config.js';
-import { ensureAuth, currentUid } from './supabase.js';
+import { ensureAuth, currentUid, sendMagicLink, signOut } from './supabase.js';
 import { createSession, previewSession, joinSession, watchSession, cleanCode, linkFor,
-  loadMyAnswers, saveMyAnswers, submitAnswers, loadAllAnswers } from './session.js';
+  loadMyAnswers, saveMyAnswers, submitAnswers, loadAllAnswers,
+  getProfile, saveProfile, listMySessions } from './session.js';
 import { computeReport } from './psychology.js';
 import { renderReveal, renderRevealWaiting } from './reveal.js';
+import { renderLogin, renderCheckEmail, renderProfile, renderDashboard } from './account.js';
 
 validateQuestions();
 
-const POINTER_KEY = 'compat.session.v1';   // which session this device is in: { code, role }
+const POINTER_KEY = 'compat.session.v1';    // the session this device last opened: { code, role }
+const PENDING_KEY = 'compat.pendingJoin.v1'; // a join link waiting for sign-in to finish
 const draftKey = (code) => `compat.draft.${code}`;
 const app = document.getElementById('app');
 const saveState = document.getElementById('saveState');
 
 const state = {
-  screen: 'loading',   // loading | setup | error | landing | join | waiting | questions | done
+  screen: 'loading',   // loading | setup | login | profile | dashboard | join | questions | done | submitted | reveal
+  profile: null,       // { display_name, gender } for the signed-in account
   sessionCode: null,
   role: null,          // 'A' (creator) or 'B' (joiner)
   myName: '',
   partnerName: null,
-  started: false,      // true once both have joined and the questionnaire has started
+  started: false,      // true once the questionnaire has started for the open session
   index: 0,
   answers: {},
   introSeen: {},
@@ -40,6 +44,10 @@ function savePointer(code, role) {
 function forgetPointer() {
   try { localStorage.removeItem(POINTER_KEY); } catch { /* storage off */ }
 }
+const pendingJoin = () => { try { return localStorage.getItem(PENDING_KEY) || null; } catch { return null; } };
+const storePendingJoin = (code) => { try { localStorage.setItem(PENDING_KEY, code); } catch { /* storage off */ } };
+const clearPendingJoin = () => { try { localStorage.removeItem(PENDING_KEY); } catch { /* storage off */ } };
+
 function loadDraft(code) {
   state.answers = {}; state.index = 0; state.introSeen = {};
   try {
@@ -151,149 +159,165 @@ function showError(message, { action = 'Start again', onAction } = {}) {
   document.getElementById('retry').addEventListener('click', () => (onAction ? onAction() : boot()));
 }
 
+function loadingCard(text = 'One moment…') {
+  setHTML(`<section class="card done"><div class="big" aria-hidden="true">♡</div><p class="lead">${esc(text)}</p></section>`);
+}
+
 // ---------- setup (config not filled in yet) ----------
 function renderSetup() {
+  state.screen = 'setup';
   setHTML(`
     <section class="card">
       <h1>Connect Supabase first</h1>
-      <p class="lead">This app needs a Supabase project before two people can share a link.</p>
+      <p class="lead">This app needs a Supabase project before people can sign in.</p>
       <ol class="steps">
         <li><span class="n">1</span><span>Copy the Project URL and anon key into <code>public/js/config.js</code>.</span></li>
-        <li><span class="n">2</span><span>Turn on <b>Authentication → Sign In / Providers → Allow anonymous sign-ins</b>.</span></li>
-        <li><span class="n">3</span><span>Run <code>supabase/migrations/0001_couples_init.sql</code> in the SQL editor.</span></li>
+        <li><span class="n">2</span><span>Turn on <b>Authentication → Email</b> with magic links.</span></li>
+        <li><span class="n">3</span><span>Run the SQL files in <code>supabase/migrations/</code> in order.</span></li>
       </ol>
-      <p class="ref-note">See README.md for the exact commands.</p>
     </section>`);
 }
 
-// ---------- landing: the creator enters a name and starts a session ----------
-function renderLanding(notice) {
-  state.screen = 'landing';
-  setHTML(`
-    <section class="card hero">
-      <div class="heart" aria-hidden="true">♡</div>
-      <h1>Answer separately. See where you match.</h1>
-      <p class="lead">Start a session, then send the link to your partner. You each answer on your own, and nobody sees the other's answers until you both finish.</p>
-      ${notice ? `<p class="ref-note">${esc(notice)}</p>` : ''}
-      <ol class="steps">
-        <li><span class="n">1</span><span>Enter your first name and create a link.</span></li>
-        <li><span class="n">2</span><span>Send the link to your partner. They open it and join.</span></li>
-        <li><span class="n">3</span><span>Answer ${QUESTIONS.length} questions on your own, then see your answers together.</span></li>
-      </ol>
-      <label class="field" for="name">Your first name</label>
-      <input id="name" class="text" type="text" maxlength="30" autocomplete="given-name" placeholder="e.g. Maya">
-      <div class="btn-row"><button class="btn btn-primary" id="create" disabled>Create link</button></div>
-      <p class="ref-note">Answer for yourself, not the couple you would like to be. Honest answers are what make the results useful.</p>
-    </section>`);
-
-  const input = document.getElementById('name');
-  const create = document.getElementById('create');
-  const sync = () => { create.disabled = input.value.trim().length < 1; };
-  input.addEventListener('input', sync);
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !create.disabled) create.click(); });
-  create.addEventListener('click', async () => {
-    create.disabled = true;
-    create.textContent = 'Creating…';
-    try {
-      const uid = await ensureAuth();
-      const code = await createSession(uid, input.value.trim());
-      savePointer(code, 'A');
-      attach(code);
-    } catch (err) {
-      console.error(err);
-      create.disabled = false;
-      create.textContent = 'Create link';
-      showError('We could not create a link. Check your connection and try again.', { action: 'Back', onAction: () => renderLanding() });
-    }
+// ---------- sign-in ----------
+function renderLoginScreen(notice) {
+  state.screen = 'login';
+  renderLogin(app, {
+    notice,
+    onSendLink: async (address) => {
+      await sendMagicLink(address);
+      renderCheckEmail(app, {
+        email: address,
+        onBack: () => renderLoginScreen(),
+        onResend: () => sendMagicLink(address),
+      });
+    },
   });
-  input.focus();
 }
 
-// ---------- join: the invited person opens the link ----------
-async function renderJoin(code) {
-  state.screen = 'join';
-  setHTML(`<section class="card done"><div class="big" aria-hidden="true">♡</div><p class="lead">Opening your invitation…</p></section>`);
-  let preview;
+async function doSignOut() {
+  try { await signOut(); } catch (err) { console.error(err); }
+  if (state.unsub) state.unsub();
+  state.unsub = null;
+  state.sessionCode = null;
+  state.profile = null;
+  forgetPointer();
+  renderLoginScreen();
+}
+
+// Runs after sign-in: profile first, then a pending join link, then the dashboard.
+async function routeSignedIn() {
+  loadingCard();
   try {
-    await ensureAuth();
-    preview = await previewSession(code);
+    state.profile = await getProfile(currentUid());
   } catch (err) {
     console.error(err);
-    return showError('We could not open that link. Check your connection and try again.');
+    return showError('We could not load your profile. Check your connection and try again.');
   }
-  if (!preview) return showError('We could not find that link. Ask your partner to send it again.', { action: 'Start my own', onAction: () => { forgetPointer(); renderLanding(); } });
-  if (preview.isMember) return attach(code);
-  if (preview.isFull) {
-    return showError('This session already has two people. Ask your partner to start a new link.', { action: 'Start my own', onAction: () => { forgetPointer(); renderLanding(); } });
+  if (!state.profile) return renderProfileScreen(true);
+  const pending = pendingJoin();
+  if (pending) {
+    clearPendingJoin();
+    return renderJoinConfirm(pending);
   }
-  const host = preview.hostName || 'Your partner';
+  return renderDashboardScreen();
+}
+
+function renderProfileScreen(first) {
+  state.screen = 'profile';
+  renderProfile(app, {
+    initial: first ? null : state.profile,
+    onSave: async ({ display_name, gender }) => {
+      await saveProfile(currentUid(), { display_name, gender });
+      state.profile = { display_name, gender };
+      return first ? routeSignedIn() : renderDashboardScreen();
+    },
+    onSignOut: doSignOut,
+  });
+}
+
+// ---------- dashboard: your sessions, start new, join by link or code ----------
+async function renderDashboardScreen() {
+  state.screen = 'dashboard';
+  loadingCard('Opening your sessions…');
+  let sessions = [];
+  try {
+    sessions = await listMySessions(currentUid());
+  } catch (err) {
+    console.error(err);
+    return showError('We could not load your sessions. Check your connection and try again.', { action: 'Try again', onAction: renderDashboardScreen });
+  }
+  renderDashboard(app, {
+    profile: state.profile,
+    sessions,
+    onNew: startNewSession,
+    onOpen: (code) => attach(code),
+    onJoinLink: (text) => {
+      const raw = String(text || '');
+      const code = cleanCode(raw.includes('join=') ? raw.split('join=').pop() : raw);
+      renderJoinConfirm(code);
+    },
+    onSignOut: doSignOut,
+    onEditProfile: () => renderProfileScreen(false),
+  });
+}
+
+async function startNewSession() {
+  try {
+    const code = await createSession(currentUid(), state.profile.display_name, state.profile.gender);
+    savePointer(code, 'A');
+    attach(code);
+  } catch (err) {
+    console.error(err);
+    showError('We could not create a session. Check your connection and try again.', { action: 'Back to my sessions', onAction: renderDashboardScreen });
+  }
+}
+
+// ---------- join: confirm who you will be, then join ----------
+async function renderJoinConfirm(code) {
+  state.screen = 'join';
+  loadingCard('Opening your invitation…');
+  let p;
+  try {
+    p = await previewSession(code);
+  } catch (err) {
+    console.error(err);
+    return showError('We could not open that link. Check your connection and try again.', { action: 'Back to my sessions', onAction: renderDashboardScreen });
+  }
+  if (!p) return showError('We could not find that session. Check the link or code and try again.', { action: 'Back to my sessions', onAction: renderDashboardScreen });
+  if (p.isMember) return attach(code);
+  if (p.isFull) return showError('This session already has two people.', { action: 'Back to my sessions', onAction: renderDashboardScreen });
+
+  const me = state.profile;
+  const genderWord = me.gender === 'male' ? 'male' : 'female';
   setHTML(`
     <section class="card hero">
       <div class="heart" aria-hidden="true">♡</div>
-      <h1>${esc(host)} invited you</h1>
-      <p class="lead">Join to connect. You will each answer on your own, and see each other's answers only after you both finish.</p>
-      <label class="field" for="name">Your first name</label>
-      <input id="name" class="text" type="text" maxlength="30" autocomplete="given-name" placeholder="e.g. Sam">
-      <div class="btn-row"><button class="btn btn-primary" id="join" disabled>Join</button></div>
+      <h1>${esc(p.hostName)} invited you</h1>
+      <p class="lead">Join as <b>${esc(me.display_name)}</b> (${genderWord}). You will each answer on your own, and see each other's answers only after you both submit.</p>
+      <div class="btn-row stack">
+        <button class="btn btn-primary" id="join">Join as ${esc(me.display_name)}</button>
+        <button class="btn btn-ghost" id="back">Back to my sessions</button>
+      </div>
     </section>`);
 
-  const input = document.getElementById('name');
-  const join = document.getElementById('join');
-  const sync = () => { join.disabled = input.value.trim().length < 1; };
-  input.addEventListener('input', sync);
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !join.disabled) join.click(); });
-  join.addEventListener('click', async () => {
-    join.disabled = true;
-    join.textContent = 'Joining…';
+  document.getElementById('back').addEventListener('click', renderDashboardScreen);
+  document.getElementById('join').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    btn.textContent = 'Joining…';
     try {
-      const uid = await ensureAuth();
-      await joinSession(uid, code, input.value.trim());
+      await joinSession(currentUid(), code, me.display_name, me.gender);
       savePointer(code, 'B');
       attach(code);
     } catch (err) {
       console.error(err);
       if (err.code === 'app/full') {
-        return showError('Someone else just joined this session. Ask your partner to start a new link.', { action: 'Start my own', onAction: () => { forgetPointer(); renderLanding(); } });
+        return showError('Someone else just joined this session.', { action: 'Back to my sessions', onAction: renderDashboardScreen });
       }
-      join.disabled = false;
-      join.textContent = 'Join';
-      showError('We could not join. Try opening the link again.', { action: 'Try again', onAction: () => renderJoin(code) });
+      btn.disabled = false;
+      btn.textContent = `Join as ${me.display_name}`;
+      showError('We could not join. Try the link again.', { action: 'Try again', onAction: () => renderJoinConfirm(code) });
     }
-  });
-  input.focus();
-}
-
-// ---------- waiting: the creator shares the link ----------
-function renderWaiting() {
-  state.screen = 'waiting';
-  const link = linkFor(state.sessionCode);
-  const canShare = typeof navigator.share === 'function';
-  setHTML(`
-    <section class="card hero">
-      <div class="people" aria-hidden="true"><span class="avatar on">${esc((state.myName[0] || '?').toUpperCase())}</span><span class="link-dot"></span><span class="avatar">?</span></div>
-      <h1>Send this link to your partner</h1>
-      <p class="lead">Waiting for them to join. This page updates on its own.</p>
-      <div class="linkbox">
-        <code id="link">${esc(link)}</code>
-      </div>
-      <div class="btn-row stack">
-        <button class="btn btn-primary" id="copy">Copy link</button>
-        ${canShare ? '<button class="btn btn-ghost" id="share">Share…</button>' : ''}
-      </div>
-      <p class="ref-note">Keep this page open, or come back to this device and it will pick up where you left off.</p>
-    </section>`);
-
-  document.getElementById('copy').addEventListener('click', async (e) => {
-    try {
-      await navigator.clipboard.writeText(link);
-      e.currentTarget.textContent = 'Copied ✓';
-    } catch {
-      e.currentTarget.textContent = 'Select and copy the link above';
-    }
-    setTimeout(() => { const b = document.getElementById('copy'); if (b) b.textContent = 'Copy link'; }, 2000);
-  });
-  document.getElementById('share')?.addEventListener('click', () => {
-    navigator.share({ title: 'Compatibility', text: 'Join my compatibility session', url: link }).catch(() => {});
   });
 }
 
@@ -313,7 +337,7 @@ function onSession(code, s) {
     forgetPointer();
     if (state.unsub) state.unsub();
     state.unsub = null;
-    return renderLanding(s ? 'You are not part of that session.' : 'That session no longer exists.');
+    return renderDashboardScreen();
   }
 
   state.role = me.role;
@@ -324,8 +348,7 @@ function onSession(code, s) {
   state.sessionStatus = s.status;
   savePointer(code, me.role);
 
-  // The creator can answer straight away. The partner's seat is shown as a banner until they join.
-  // Later snapshots do not reset progress.
+  // The creator can answer straight away. Later snapshots do not reset progress.
   if (!state.started) {
     state.started = true;
     loadDraft(code);
@@ -334,10 +357,11 @@ function onSession(code, s) {
     hydrateFromServer(code);
     return;
   }
+
   // Partner just joined: refresh the screen so the invite banner goes away.
   if (!hadPartner && state.partnerName && state.screen !== 'reveal') render();
 
-  // Partner status changed. Once both have submitted, the session is revealed.
+  // Both have submitted: the session is revealed.
   if (s.status === 'revealed' && state.screen !== 'reveal' && state.locked) return startReveal();
   if (state.screen === 'submitted') renderSubmitted();
 }
@@ -366,6 +390,7 @@ async function startReveal() {
   }
 }
 
+// Leaves the session on this device only. The session stays in your account, so you can open it from any browser.
 function leaveSession() {
   if (state.unsub) state.unsub();
   state.unsub = null;
@@ -377,7 +402,7 @@ function leaveSession() {
   state.answers = {};
   state.index = 0;
   state.sessionCode = null;
-  renderLanding('You left the session on this device. Your partner can still see it on their device.');
+  renderDashboardScreen();
 }
 
 // ---------- questionnaire ----------
@@ -575,8 +600,8 @@ function renderSubmitted() {
         ? 'Both of you have submitted. The reveal of your answers and your match report comes next.'
         : `Waiting for ${esc(partner)} to submit. Their answers stay hidden until you both have finished.`}</p>
       <div class="stat">${scoredAnswered()} of ${scoredTotal()} scored questions submitted</div>
-      <p class="ref-note">Nothing you can change now. Keep this page open, or come back on this device.</p>
-      <div class="btn-row"><button class="btn btn-ghost" id="leave">Leave this session on this device</button></div>
+      <p class="ref-note">Nothing you can change now. Keep this page open, or come back from any browser.</p>
+      <div class="btn-row"><button class="btn btn-ghost" id="leave">Back to my sessions</button></div>
     </section>`);
   document.getElementById('leave')?.addEventListener('click', leaveSession);
 }
@@ -618,21 +643,21 @@ document.addEventListener('keydown', (e) => {
 async function boot() {
   if (!CONFIG_READY) return renderSetup();
 
-  // Sign in first on every path, so the session listener always has an identity.
-  try { await ensureAuth(); } catch (err) {
+  // A join link is kept across the email round trip, because the magic link returns to the bare address.
+  const fromUrl = cleanCode(new URLSearchParams(location.search).get('join'));
+  if (fromUrl) storePendingJoin(fromUrl);
+
+  let uid;
+  try {
+    uid = await ensureAuth();
+  } catch (err) {
     console.error(err);
-    return showError('We could not connect. Check your internet connection, and that anonymous sign-ins are allowed in Supabase.');
+    return showError('We could not connect. Check your internet connection and try again.');
   }
-
-  const joinCode = cleanCode(new URLSearchParams(location.search).get('join'));
-  const saved = loadPointer();
-
-  if (joinCode) {
-    if (saved && saved.code === joinCode) return attach(joinCode);
-    return renderJoin(joinCode);
+  if (!uid) {
+    return renderLoginScreen(pendingJoin() ? 'Sign in to join your partner\'s session. Your link is kept.' : null);
   }
-  if (saved?.code) return attach(saved.code);
-  renderLanding();
+  return routeSignedIn();
 }
 
 boot();

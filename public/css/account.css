@@ -1,0 +1,215 @@
+/* Account screens only: sign in, check email, profile, dashboard.
+   Builds on the tokens and classes in styles.css and the visual language of reveal.css. */
+
+.ac { display: grid; gap: 16px; min-width: 0; --ac-ease: cubic-bezier(.2, .7, .2, 1); }
+.ac > * { min-width: 0; }
+.ac h1, .ac h2, .ac h3, .ac p { overflow-wrap: anywhere; }
+.ac h1 { font-size: 28px; letter-spacing: -.015em; margin: 0 0 8px; }
+.ac h2 { font-size: 18px; line-height: 1.3; margin: 0; letter-spacing: -.005em; }
+.ac h3 { font-size: 16px; line-height: 1.3; margin: 0; font-weight: 650; }
+.ac .lead { color: var(--ink-soft); margin: 0; }
+
+.ac .card, .ac-enter {
+  animation: ac-rise .5s var(--ac-ease) both; animation-delay: calc(var(--i, 0) * 55ms);
+}
+@keyframes ac-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+.ac :is(button, a):focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px;
+}
+.ac .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.ac .btn-sm { min-height: 44px; padding: 8px 18px; }
+.ac .btn-ghost:hover:not(:disabled) { background: var(--surface-2); }
+.ac .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+.ac .btn svg { width: 16px; height: 16px; flex: 0 0 auto; }
+
+.ac-vh {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+
+/* ---------- Panel: the single card used by sign in, check email, profile ---------- */
+.ac-panel { padding: 32px 28px 28px; position: relative; overflow: hidden; }
+.ac-panel::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 170px; pointer-events: none;
+  background:
+    radial-gradient(60% 100% at 15% 0%, color-mix(in srgb, var(--accent-soft) 85%, transparent), transparent 70%),
+    radial-gradient(60% 100% at 90% 0%, color-mix(in srgb, var(--sage-soft) 85%, transparent), transparent 70%);
+}
+.ac-panel > * { position: relative; }
+.ac-head { text-align: center; margin-bottom: 24px; }
+.ac-head .lead { max-width: 38ch; margin-inline: auto; }
+
+.ac-badge {
+  width: 64px; height: 64px; border-radius: 50%; margin: 0 auto 16px;
+  display: grid; place-items: center; color: var(--accent);
+  background: var(--surface); border: 1px solid var(--line);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.ac-badge svg { width: 28px; height: 28px; }
+
+/* ---------- Forms ---------- */
+.ac-form { display: grid; gap: 18px; }
+.ac-field { display: grid; gap: 6px; min-width: 0; }
+.ac label.field, .ac legend.field { font-weight: 600; font-size: 15px; margin: 0; padding: 0; }
+.ac input.text {
+  font-size: 16px; /* stops iOS zooming in on focus */
+  transition: border-color .15s ease, background .15s ease;
+}
+.ac input.text::placeholder { color: color-mix(in srgb, var(--ink-soft) 70%, transparent); }
+.ac input.text:hover { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.ac input.text:focus { border-color: var(--accent); background: var(--surface); }
+.ac-help { font-size: 13.5px; color: var(--ink-soft); margin: 0; }
+
+/* Callouts: a soft notice, and an inline error. Both stay empty and hidden until used. */
+.ac-notice, .ac-error, .ac-ok {
+  border-radius: var(--radius-sm); padding: 11px 14px; font-size: 14.5px; margin: 0;
+  display: flex; gap: 10px; align-items: flex-start; text-align: left;
+}
+.ac-notice { background: var(--warn-soft); border-left: 3px solid var(--warn); margin-bottom: 20px; }
+.ac-error { background: var(--accent-soft); border-left: 3px solid var(--accent); }
+.ac-ok { background: var(--sage-soft); border-left: 3px solid var(--sage); }
+.ac-notice svg, .ac-error svg, .ac-ok svg { width: 18px; height: 18px; flex: 0 0 auto; margin-top: 2px; }
+.ac-notice svg { color: var(--warn); }
+.ac-error svg { color: var(--accent); }
+.ac-ok svg { color: var(--sage); }
+.ac-error:empty, .ac-ok:empty { display: none; }
+
+/* ---------- Check email ---------- */
+.ac-email {
+  display: inline-block; max-width: 100%; overflow-wrap: anywhere; font-weight: 650;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 8px 16px; margin: 4px 0 14px;
+}
+.ac-panel .btn-row { margin-top: 0; }
+.ac-count { font-variant-numeric: tabular-nums; }
+
+/* ---------- Gender choice ---------- */
+.ac-fieldset { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: 8px; }
+.ac legend.field { margin-bottom: 8px; }
+.ac-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ac-choice {
+  position: relative; cursor: pointer; min-height: 124px; min-width: 0;
+  display: grid; justify-items: center; align-content: center; gap: 10px;
+  padding: 18px 12px 16px; border-radius: var(--radius);
+  border: 1.5px solid var(--line); background: var(--surface);
+  font-weight: 650; font-size: 16px; user-select: none; -webkit-tap-highlight-color: transparent;
+  transition: border-color .15s ease, background .15s ease, transform .12s ease, box-shadow .2s ease;
+}
+.ac-choice:hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+.ac-choice:active { transform: scale(.985); }
+.ac-choice input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.ac-choice:has(input:focus-visible) {
+  outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px;
+}
+.ac-choice-icon {
+  width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--surface-2); color: var(--ink-soft);
+  transition: background .15s ease, color .15s ease;
+}
+.ac-choice-icon svg { width: 24px; height: 24px; }
+.ac-check {
+  position: absolute; top: 10px; right: 10px; width: 24px; height: 24px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--accent); color: var(--accent-ink);
+  opacity: 0; transform: scale(.5); transition: opacity .15s ease, transform .25s var(--ac-ease);
+}
+.ac-check svg { width: 13px; height: 13px; }
+.ac-choice.is-selected {
+  border-color: var(--accent); background: var(--accent-soft);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.ac-choice.is-selected .ac-choice-icon { background: var(--surface); color: var(--accent); }
+.ac-choice.is-selected .ac-check { opacity: 1; transform: none; }
+
+/* ---------- Quiet links ---------- */
+.ac-links { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0 6px; }
+.ac-panel .ac-links { margin-top: 12px; }
+.ac-link {
+  appearance: none; background: none; border: 0; cursor: pointer; min-height: 44px; padding: 0 14px;
+  color: var(--ink-soft); font-weight: 600; font-size: 14.5px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: background .15s ease, color .15s ease;
+}
+.ac-link:hover { color: var(--ink); background: var(--surface-2); }
+.ac-links .ac-sep { width: 4px; height: 4px; border-radius: 50%; background: var(--line); }
+
+/* ---------- Dashboard ---------- */
+.ac-me { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
+.ac-me .avatar { width: 52px; height: 52px; font-size: 20px; flex: 0 0 auto; }
+.ac-me > div { min-width: 0; }
+.ac-me h1 { margin: 0; font-size: 26px; line-height: 1.15; }
+.ac-me p { margin: 2px 0 0; font-size: 13.5px; color: var(--ink-soft); }
+
+.ac-or {
+  display: flex; align-items: center; gap: 12px; margin: 22px 0 16px;
+  font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft);
+}
+.ac-or::before, .ac-or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+.ac-join { display: grid; gap: 6px; }
+.ac-join-row { display: flex; gap: 8px; }
+.ac-join-row input.text { flex: 1 1 auto; min-width: 0; }
+.ac-join-row .btn { flex: 0 0 auto; min-height: 48px; padding-inline: 22px; }
+.ac-join .ac-error { margin-top: 4px; }
+
+.ac-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 12px 2px -4px; }
+.ac-count-pill { font-size: 13px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+
+.ac-sessions { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.ac .ac-session { padding: 18px; display: grid; gap: 14px; }
+.ac-session-main { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.ac-session-text { min-width: 0; display: grid; gap: 3px; }
+.ac-session-text h3.is-empty { color: var(--ink-soft); font-weight: 600; }
+
+.ac-pair { display: flex; flex: 0 0 auto; }
+.ac-pair .avatar { width: 40px; height: 40px; font-size: 15px; box-shadow: 0 0 0 2px var(--surface); }
+.ac-pair .avatar + .avatar { margin-left: -10px; }
+.ac-pair .avatar.ac-them { background: var(--sage); color: var(--accent-ink); border: 2px solid transparent; }
+
+.ac-status { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: 14px; font-weight: 600; color: var(--ac-tone, var(--ink-soft)); }
+.ac-status::before {
+  content: ""; flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: currentColor;
+  transform: translateY(-1px);
+}
+.ac-tone-amber { --ac-tone: var(--warn); }
+.ac-tone-sage { --ac-tone: var(--sage); }
+.ac-tone-accent { --ac-tone: var(--accent); }
+.ac-tone-neutral { --ac-tone: var(--ink-soft); }
+
+.ac-session-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding-top: 12px; border-top: 1px solid var(--line);
+}
+.ac-code { display: flex; align-items: baseline; gap: 8px; min-width: 0; font-size: 12px; color: var(--ink-soft); }
+.ac-code code {
+  font-size: 13px; letter-spacing: .08em; color: var(--ink); overflow-wrap: anywhere;
+  background: var(--surface-2); border-radius: 8px; padding: 3px 8px;
+}
+.ac-session .btn svg { transition: transform .2s var(--ac-ease); }
+.ac-session .btn:hover svg { transform: translateX(3px); }
+
+.ac-empty {
+  text-align: center; padding: 32px 24px; border-radius: var(--radius);
+  border: 1.5px dashed var(--line); background: color-mix(in srgb, var(--surface) 60%, transparent);
+}
+.ac-empty svg { width: 112px; height: 72px; display: block; margin: 0 auto 12px; }
+.ac-empty p { margin: 0 auto; color: var(--ink-soft); max-width: 32ch; }
+.ac-empty .ac-art-a { fill: var(--accent-soft); stroke: var(--accent); }
+.ac-empty .ac-art-b { fill: var(--sage-soft); stroke: var(--sage); stroke-dasharray: 5 6; }
+.ac-empty .ac-art-h { fill: var(--accent); }
+
+/* ---------- Small screens ---------- */
+@media (max-width: 439px) {
+  .ac h1 { font-size: 24px; }
+  .ac-panel { padding: 28px 20px 22px; }
+  .ac-me h1 { font-size: 23px; }
+  .ac .ac-session { padding: 16px; }
+  .ac-choice { min-height: 116px; }
+  .ac-panel .btn-row { flex-direction: column; }
+}
+
+/* ---------- Reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .ac .card, .ac-enter { animation: none !important; }
+  .ac-choice, .ac-check, .ac-link, .ac input.text, .ac-session .btn svg { transition: none; }
+}

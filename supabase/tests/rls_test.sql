@@ -48,9 +48,9 @@ declare
 begin
   -- ---- create ----
   perform pg_temp.as_user(a);
-  v_code := public.create_session('Maya');
+  v_code := public.create_session('Maya', 'female');
   perform pg_temp.check_eq('create: code is 8 chars', length(v_code), 8);
-  perform pg_temp.check_error('create: empty name rejected', $$select public.create_session('   ')$$, 'bad_name');
+  perform pg_temp.check_error('create: empty name rejected', $$select public.create_session('   ', 'female')$$, 'bad_name');
   perform pg_temp.check_eq('create: creator sees own session', (select count(*)::int from public.sessions where code = v_code), 1);
 
   -- ---- stranger cannot see anything yet ----
@@ -64,17 +64,17 @@ begin
 
   -- ---- joiner ----
   perform pg_temp.as_user(b);
-  v_join := public.join_session(v_code, 'Sam');
+  v_join := public.join_session(v_code, 'Sam', 'male');
   perform pg_temp.check_eq('join: first joiner gets the seat', v_join, 'joined');
   perform pg_temp.check_eq('join: joiner sees the session now', (select count(*)::int from public.sessions where code = v_code), 1);
   perform pg_temp.check_eq('join: status is both_joined', (select status from public.sessions where code = v_code), 'both_joined');
   perform pg_temp.check_eq('join: joiner name stored', (select member_b_name from public.sessions where code = v_code), 'Sam');
 
-  perform pg_temp.check_eq('join: rejoining is idempotent', public.join_session(v_code, 'Sam'), 'already');
+  perform pg_temp.check_eq('join: rejoining is idempotent', public.join_session(v_code, 'Sam', 'male'), 'already');
 
   -- ---- a third person is refused ----
   perform pg_temp.as_user(c);
-  perform pg_temp.check_error('join: third person refused', format($$select public.join_session('%s', 'Eve')$$, v_code), 'full');
+  perform pg_temp.check_error('join: third person refused', format($$select public.join_session('%s', 'Eve', 'male')$$, v_code), 'full');
   p := public.session_preview(v_code);
   perform pg_temp.check_eq('preview: full after two joins', (p->>'is_full')::boolean, true);
 
@@ -110,7 +110,7 @@ begin
 
   -- ---- signed-out callers are refused ----
   perform pg_temp.as_user(null);
-  perform pg_temp.check_error('auth: signed-out create refused', $$select public.create_session('Nobody')$$, 'not_signed_in');
+  perform pg_temp.check_error('auth: signed-out create refused', $$select public.create_session('Nobody', 'male')$$, 'not_signed_in');
 end $t$;
 
 rollback;

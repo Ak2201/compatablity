@@ -47,7 +47,7 @@ begin
     (select count(*)::int from pg_constraint where conname = 'answers_answers_check' and pg_get_constraintdef(oid) like '%20000%'), 0);
 
   perform pg_temp.as_user(a);
-  v_code := public.create_session('Maya');
+  v_code := public.create_session('Maya', 'female');
   -- The creator can submit before anyone joins. The reveal waits for both.
   perform pg_temp.check_eq('submit: creator can submit before the partner joins',
     public.submit_answers(v_code, '{"a":1}'), 'submitted');
@@ -59,7 +59,7 @@ begin
   perform pg_temp.as_user(a);
 
   perform pg_temp.as_user(b);
-  perform public.join_session(v_code, 'Sam');
+  perform public.join_session(v_code, 'Sam', 'male');
 
   -- A saves draft answers through the table (RLS applies), then submits.
   perform pg_temp.as_user(a);

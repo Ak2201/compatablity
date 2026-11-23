@@ -17,10 +17,49 @@ export function cleanCode(raw) {
 export const linkFor = (code) => `${location.origin}${location.pathname}?join=${code}`;
 
 // Creator: the database makes the code, so retries and collisions are handled server-side.
-export async function createSession(_uid, name) {
-  const { data, error } = await supabase.rpc('create_session', { p_name: name });
+export async function createSession(_uid, name, gender) {
+  const { data, error } = await supabase.rpc('create_session', { p_name: name, p_gender: gender });
   if (error) throw error;
   return data;
+}
+
+// ---- profile: display name and gender, one per account ----
+export async function getProfile(uid) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('display_name, gender')
+    .eq('user_id', uid)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? { display_name: data.display_name, gender: data.gender } : null;
+}
+
+export async function saveProfile(uid, { display_name, gender }) {
+  const { error } = await supabase
+    .from('profiles')
+    .upsert({ user_id: uid, display_name, gender, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+  if (error) throw error;
+}
+
+// Every session this account is in, newest first. RLS limits the rows to the ones you belong to.
+export async function listMySessions(uid) {
+  const { data, error } = await supabase
+    .from('sessions')
+    .select('code, status, member_a, member_a_name, member_a_gender, member_b, member_b_name, member_b_gender, created_at')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map((row) => {
+    const isA = row.member_a === uid;
+    return {
+      code: row.code,
+      status: row.status,
+      role: isA ? 'A' : 'B',
+      myName: isA ? row.member_a_name : row.member_b_name,
+      myGender: isA ? row.member_a_gender : row.member_b_gender,
+      partnerName: isA ? row.member_b_name : row.member_a_name,
+      partnerGender: isA ? row.member_b_gender : row.member_a_gender,
+    };
+  });
 }
 
 // Before joining, the invitee sees only the host's first name and whether the seat is taken.
@@ -33,8 +72,8 @@ export async function previewSession(code) {
 }
 
 // Joiner. The database locks the row, so two people joining at once cannot both get the second seat.
-export async function joinSession(_uid, code, name) {
-  const { error } = await supabase.rpc('join_session', { p_code: code, p_name: name });
+export async function joinSession(_uid, code, name, gender) {
+  const { error } = await supabase.rpc('join_session', { p_code: code, p_name: name, p_gender: gender });
   if (error) {
     const msg = error.message || '';
     if (msg.includes('full')) throw Object.assign(new Error('full'), { code: 'app/full' });
