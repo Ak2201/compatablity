@@ -10,6 +10,8 @@ import { createSession, previewSession, joinSession, watchSession, cleanCode, li
 import { computeReport } from './psychology.js';
 
 import { renderReveal, renderRevealWaiting } from './reveal.js';
+import { buildInsights } from './insights.js';
+import { renderDashboard as renderResultsDashboard } from './dashboard.js';
 import { renderLogin, renderCheckEmail, renderProfile, renderDashboard } from './account.js';
 
 validateQuestions();
@@ -391,11 +393,32 @@ async function startReveal() {
     const report = activeKind === 'friendship'
       ? computeFriendshipReport(mine.answers || {}, theirs.answers || {}, reportOpts)
       : computeReport(mine.answers || {}, theirs.answers || {}, reportOpts);
-    renderReveal(app, report, {
-      myName: state.myName,
-      partnerName: state.partnerName || 'Your partner',
-      onLeave: leaveSession,
-    });
+    // The results dashboard: the report plus the insight engine (likely fights, causes, strengths, bids, deck).
+    const myAnswers = mine.answers || {};
+    const theirAnswers = theirs.answers || {};
+    let insights = null;
+    try {
+      insights = buildInsights(myAnswers, theirAnswers, report, {
+        kind: activeKind,
+        myName: state.myName,
+        partnerName: state.partnerName || (activeKind === 'friendship' ? 'your friend' : 'your partner'),
+      });
+    } catch (err) {
+      console.error('insights failed; showing the classic reveal', err);
+    }
+    const partnerLabel = state.partnerName || (activeKind === 'friendship' ? 'Your friend' : 'Your partner');
+    if (insights) {
+      renderResultsDashboard(app, {
+        report,
+        insights,
+        myName: state.myName,
+        partnerName: partnerLabel,
+        kind: activeKind,
+        onLeave: leaveSession,
+      });
+    } else {
+      renderReveal(app, report, { myName: state.myName, partnerName: partnerLabel, onLeave: leaveSession });
+    }
   } catch (err) {
     console.error(err);
     state.screen = 'submitted';
