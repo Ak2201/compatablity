@@ -1,0 +1,74 @@
+rules_version = '2';
+
+// Reveal gate: partner answers are only readable once the session is 'revealed'.
+// Sessions are readable by exact code (get) only; lists are never allowed.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function sessionData(code) {
+      return get(/databases/$(database)/documents/sessions/$(code)).data;
+    }
+
+    function isMemberOf(data) {
+      return signedIn() && request.auth.uid in data.memberUids;
+    }
+
+    match /sessions/{code} {
+      // Exact-ID reads only. The joiner needs this to see who invited them before joining.
+      allow get: if signedIn();
+      allow list: if false;
+
+      // Creator: one member (self), status waiting, server timestamp, sane name length.
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['status', 'memberUids', 'members', 'createdAt'])
+        && request.resource.data.status == 'waiting_for_partner'
+        && request.resource.data.memberUids == [request.auth.uid]
+        && request.resource.data.members[request.auth.uid].role == 'A'
+        && request.resource.data.members[request.auth.uid].name is string
+        && request.resource.data.members[request.auth.uid].name.size() >= 1
+        && request.resource.data.members[request.auth.uid].name.size() <= 30
+        && request.resource.data.createdAt == request.time;
+
+      // Joiner: only when one seat is free. Adds exactly their own uid and name, then moves to both_joined.
+      allow update: if signedIn()
+        && resource.data.status == 'waiting_for_partner'
+        && resource.data.memberUids.size() == 1
+        && !(request.auth.uid in resource.data.memberUids)
+        && request.resource.data.memberUids == resource.data.memberUids + [request.auth.uid]
+        && request.resource.data.status == 'both_joined'
+        && request.resource.data.members.size() == 2
+        && request.resource.data.members[request.auth.uid].role == 'B'
+        && request.resource.data.members[request.auth.uid].name is string
+        && request.resource.data.members[request.auth.uid].name.size() >= 1
+        && request.resource.data.members[request.auth.uid].name.size() <= 30
+        && request.resource.data.createdAt == resource.data.createdAt;
+
+      allow delete: if false;
+
+      // Answers: each person writes only their own doc, only before it is locked.
+      // Each person reads their own doc at any time, and the partner's only after 'revealed'.
+      match /answers/{uid} {
+        allow read: if isMemberOf(sessionData(code))
+          && (request.auth.uid == uid || sessionData(code).status == 'revealed');
+
+        allow create, update: if signedIn()
+          && request.auth.uid == uid
+          && isMemberOf(sessionData(code))
+          && !(resource.data.locked == true)
+          && request.resource.data.locked == false
+          && request.resource.data.keys().hasOnly(['answers', 'locked', 'updatedAt'])
+          && request.resource.data.answers.size() <= 200;
+
+        allow delete: if false;
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
