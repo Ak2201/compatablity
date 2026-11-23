@@ -14,6 +14,10 @@ import { computeFriendshipReport } from './friend-psychology.js';
 import { buildInsights } from './insights.js';
 import { strongestAndWeakest, trendFromSnapshots, talkFirst, shareCard } from './results.js';
 import { attachmentGuide, patternExercise, reflectionPrompt, personalPatterns, GLOSSARY } from './psych-depth.js';
+import { navSet, navRoot } from './nav.js';
+import { SELF_QUESTIONS, SELF_DIMENSIONS } from './self-questions.js';
+import { renderSelfEditor, renderSelfReport } from './self-screens.js';
+import { selfProfile, compareSelf } from './self-profile.js';
 
 const BANK_QUESTIONS = { couple: QUESTIONS, friendship: FRIEND_QUESTIONS };
 
@@ -155,20 +159,24 @@ function maybeNewQuestionsDialog(data) {
 }
 
 export async function showHome(extra = {}) {
+  navRoot('home', () => showHome());
   const data = await load();
   renderHome(ctx.el, homeOptions(data, extra));
   maybeNewQuestionsDialog(data);
   // The psychology guide, and older sessions from before the new profile model, stay reachable.
   ctx.el.insertAdjacentHTML('beforeend',
     '<p style="text-align:center;margin:16px 0;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">'
+    + '<button class="btn btn-primary btn-sm" type="button" data-self>My personal profile</button>'
     + '<button class="btn btn-ghost btn-sm" type="button" data-psych>Psychology guide</button>'
     + (ctx.onLegacyDashboard ? '<button class="btn btn-ghost btn-sm" type="button" data-older>Older sessions</button>' : '')
     + '</p>');
   ctx.el.querySelector('[data-psych]')?.addEventListener('click', showPsychology);
+  ctx.el.querySelector('[data-self]')?.addEventListener('click', showSelfReport);
   ctx.el.querySelector('[data-older]')?.addEventListener('click', ctx.onLegacyDashboard);
 }
 
 function showEditor(bank) {
+  navSet('editor-' + bank, () => showEditor(bank));
   const answers = cache?.mine?.[bank] || {};
   renderProfileEditor(ctx.el, {
     bank,
@@ -183,6 +191,7 @@ function showEditor(bank) {
 }
 
 async function showPair(id) {
+  navSet('pair-' + id, () => showPair(id));
   const data = cache || await load();
   const conn = data.conns.find((c) => c.id === id);
   const bankAnswers = data.pairs[id];
@@ -232,6 +241,7 @@ async function showPair(id) {
 }
 
 async function showPsychology() {
+  navSet('psychology', () => showPsychology());
   const data = cache || await load();
   const history = [];
   let firstReport = null;
@@ -260,6 +270,50 @@ async function showPsychology() {
     patterns: personalPatterns(history),
     glossary: Object.entries(GLOSSARY).map(([term, plain]) => ({ term, plain })),
     onBack: () => showHome(),
+  });
+}
+
+// ---------- personal self-test ----------
+function showSelfEditor() {
+  navSet('self-editor', () => showSelfEditor());
+  const answers = cache?.mine?.self || {};
+  renderSelfEditor(ctx.el, {
+    answers,
+    onSave: (next) => {
+      if (cache) { cache.mine.self = next; }
+      return saveMyProfileAnswers(currentUid(), 'self', next).catch((err) => console.error(err));
+    },
+    onBack: () => showHome(),
+    onSnapshot: (label) => saveSnapshot('self', label),
+  });
+}
+
+async function showSelfReport() {
+  navSet('self-report', () => showSelfReport());
+  const data = cache || await load();
+  const mine = data.mine.self || {};
+  const profile = selfProfile(mine);
+  const connections = [];
+  for (const c of data.conns) {
+    if (!c.accepted) continue;
+    let compare;
+    if (!(c.myShare && c.partnerShare)) {
+      compare = 'not_shared';
+    } else {
+      const got = await getConnectionAnswers(c.id, 'self');
+      compare = got
+        ? compareSelf(mine, got.theirs || {}, { partnerName: c.partnerName })
+        : 'not_shared';
+    }
+    const kind = (c.partnerGender && ctx.profile.gender && c.partnerGender !== ctx.profile.gender) ? 'Couple' : 'Friendship';
+    connections.push({ id: c.id, name: c.nickname || c.partnerName, kindLabel: kind, compare });
+  }
+  renderSelfReport(ctx.el, {
+    profile,
+    name: ctx.profile.display_name,
+    onBack: () => showHome(),
+    onEdit: () => showSelfEditor(),
+    connections,
   });
 }
 

@@ -15,6 +15,7 @@ import { renderReveal, renderRevealWaiting } from './reveal.js';
 import { buildInsights } from './insights.js';
 import { renderDashboard as renderResultsDashboard } from './dashboard.js';
 import { startHome } from './home-flow.js';
+import { navSet, navRoot, navBack, onNavChange } from './nav.js';
 import { renderLogin, renderCheckEmail, renderProfile, renderDashboard } from './account.js';
 
 validateQuestions();
@@ -32,6 +33,11 @@ const PENDING_KEY = 'compat.pendingJoin.v1'; // a join link waiting for sign-in 
 const draftKey = (code) => `compat.draft.${code}`;
 const app = document.getElementById('app');
 const saveState = document.getElementById('saveState');
+
+// Header Back button: shown whenever there is a previous screen.
+const navBtn = document.getElementById('navBack');
+navBtn?.addEventListener('click', navBack);
+onNavChange((canGoBack) => { if (navBtn) navBtn.hidden = !canGoBack; });
 
 const state = {
   screen: 'loading',   // loading | setup | login | profile | dashboard | join | questions | done | submitted | reveal
@@ -204,6 +210,7 @@ function loadingCard(text = 'One moment…') {
 
 // ---------- setup (config not filled in yet) ----------
 function renderSetup() {
+  navRoot('setup', renderSetup);
   state.screen = 'setup';
   setHTML(`
     <section class="card">
@@ -219,6 +226,7 @@ function renderSetup() {
 
 // ---------- sign-in ----------
 function renderLoginScreen(notice) {
+  navRoot('login', () => renderLoginScreen());
   state.screen = 'login';
   renderLogin(app, {
     notice,
@@ -245,6 +253,7 @@ async function doSignOut() {
 
 // ---------- compare your partners (private to you) ----------
 async function renderCompareScreen() {
+  navSet('compare', renderCompareScreen);
   state.screen = 'compare';
   loadingCard('Comparing your partners…');
   try {
@@ -309,6 +318,7 @@ async function routeSignedIn() {
 }
 
 function renderProfileScreen(first) {
+  navSet('profile', () => renderProfileScreen(first));
   state.screen = 'profile';
   renderProfile(app, {
     initial: first ? null : state.profile,
@@ -323,6 +333,7 @@ function renderProfileScreen(first) {
 
 // ---------- dashboard: your sessions, start new, join by link or code ----------
 async function renderDashboardScreen() {
+  navSet('older-sessions', renderDashboardScreen);
   state.screen = 'dashboard';
   loadingCard('Opening your sessions…');
   let sessions = [];
@@ -372,6 +383,7 @@ async function startNewSession(kind = 'couple') {
 
 // ---------- join: confirm who you will be, then join ----------
 async function renderJoinConfirm(code) {
+  navSet('join', () => renderJoinConfirm(code));
   state.screen = 'join';
   loadingCard('Opening your invitation…');
   let p;
@@ -424,6 +436,7 @@ async function renderJoinConfirm(code) {
 
 // ---------- session watching ----------
 function attach(code) {
+  navSet('session-' + code, () => attach(code));
   state.sessionCode = code;
   state.started = false;
   if (state.unsub) state.unsub();
@@ -470,6 +483,7 @@ function onSession(code, s) {
 
 // ---------- reveal ----------
 async function startReveal() {
+  navSet('reveal', () => startReveal());
   state.screen = 'reveal';
   renderRevealWaiting(app, {});
   try {
@@ -717,6 +731,7 @@ async function submitNow() {
 
 // Shown once your answers are locked. Partner's answers stay hidden until the reveal.
 function renderSubmitted() {
+  navSet('submitted', renderSubmitted);
   state.screen = 'submitted';
   const partner = state.partnerName || 'your partner';
   const bothDone = state.sessionStatus === 'locked' || state.sessionStatus === 'revealed';
@@ -769,6 +784,7 @@ document.addEventListener('keydown', (e) => {
 
 // ---------- keep your sessions: attach an email to an anonymous account ----------
 function renderKeepSessions() {
+  navSet('keep', renderKeepSessions);
   state.screen = 'keep';
   setHTML(`
     <section class="card hero">
