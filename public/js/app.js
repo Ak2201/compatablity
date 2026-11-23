@@ -326,6 +326,9 @@ async function renderJoinConfirm(code) {
       if (err.code === 'app/full') {
         return showError('Someone else just joined this session.', { action: 'Back to my sessions', onAction: renderDashboardScreen });
       }
+      if (err.code === 'app/same-gender') {
+        return showError('Couple sessions are for one male and one female. Ask your partner to start a friendship session instead, or sign in with the right profile.', { action: 'Back to my sessions', onAction: renderDashboardScreen });
+      }
       btn.disabled = false;
       btn.textContent = `Join as ${me.display_name}`;
       showError('We could not join. Try the link again.', { action: 'Try again', onAction: () => renderJoinConfirm(code) });

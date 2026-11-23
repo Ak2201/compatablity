@@ -79,6 +79,7 @@ export async function joinSession(_uid, code, name, gender) {
     const msg = error.message || '';
     if (msg.includes('full')) throw Object.assign(new Error('full'), { code: 'app/full' });
     if (msg.includes('not_found')) throw Object.assign(new Error('not_found'), { code: 'app/not-found' });
+    if (msg.includes('same_gender')) throw Object.assign(new Error('same_gender'), { code: 'app/same-gender' });
     throw error;
   }
   return 'joined';
