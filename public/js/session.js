@@ -1,22 +1,13 @@
-// Session lifecycle: create a link, look one up, join it, watch it.
-// Document shape (sessions/{code}):
-//   status       'waiting_for_partner' | 'both_joined'  (later: 'answering', 'locked', 'revealed')
-//   memberUids   [uidA] or [uidA, uidB]
-//   members      { [uid]: { name, role: 'A' | 'B' } }
-//   createdAt    server timestamp
-import { doc, getDoc, setDoc, runTransaction, onSnapshot, serverTimestamp }
-  from 'https://cdn.jsdelivr.net/npm/firebase@10.14.1/firestore/+esm';
-import { db } from './firebase.js';
+// Session lifecycle on Supabase. All writes go through database functions (RPCs);
+// reads of the sessions table are limited to members by Row Level Security.
+//
+// A session, as the app sees it (same shape as before, so app.js stays simple):
+//   status      'waiting_for_partner' | 'both_joined' | 'answering' | 'locked' | 'revealed'
+//   memberUids  [uidA] or [uidA, uidB]
+//   members     { [uid]: { name, role: 'A' | 'B' } }
+import { supabase } from './supabase.js';
 
-// 32 symbols, no 0/O/1/I/L so codes are easy to read aloud. 32 divides 256 evenly, so no modulo bias.
-const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const CODE_LENGTH = 8;
-
-export function newCode() {
-  const bytes = new Uint8Array(CODE_LENGTH);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => ALPHABET[b % ALPHABET.length]).join('');
-}
 
 // Accepts whatever came in the URL and returns a safe code or ''.
 export function cleanCode(raw) {
@@ -25,54 +16,72 @@ export function cleanCode(raw) {
 
 export const linkFor = (code) => `${location.origin}${location.pathname}?join=${code}`;
 
-// Creates a session. Retries on the rare code collision: a create on an existing doc is refused by the rules.
-export async function createSession(uid, name) {
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const code = newCode();
-    try {
-      await setDoc(doc(db, 'sessions', code), {
-        status: 'waiting_for_partner',
-        memberUids: [uid],
-        members: { [uid]: { name, role: 'A' } },
-        createdAt: serverTimestamp(),
-      });
-      return code;
-    } catch (err) {
-      if (attempt === 2) throw err;
-    }
+// Creator: the database makes the code, so retries and collisions are handled server-side.
+export async function createSession(_uid, name) {
+  const { data, error } = await supabase.rpc('create_session', { p_name: name });
+  if (error) throw error;
+  return data;
+}
+
+// Before joining, the invitee sees only the host's first name and whether the seat is taken.
+// Returns { hostName, isFull, isMember } or null if the code does not exist.
+export async function previewSession(code) {
+  const { data, error } = await supabase.rpc('session_preview', { p_code: code });
+  if (error) throw error;
+  if (!data) return null;
+  return { hostName: data.host_name, isFull: data.is_full, isMember: data.is_member };
+}
+
+// Joiner. The database locks the row, so two people joining at once cannot both get the second seat.
+export async function joinSession(_uid, code, name) {
+  const { error } = await supabase.rpc('join_session', { p_code: code, p_name: name });
+  if (error) {
+    const msg = error.message || '';
+    if (msg.includes('full')) throw Object.assign(new Error('full'), { code: 'app/full' });
+    if (msg.includes('not_found')) throw Object.assign(new Error('not_found'), { code: 'app/not-found' });
+    throw error;
   }
-  throw new Error('could not create a session');
+  return 'joined';
 }
 
-// Reads a session by its exact code. The rules allow get by ID only, never list.
-export async function getSession(code) {
-  const snap = await getDoc(doc(db, 'sessions', code));
-  return snap.exists() ? snap.data() : null;
+// Converts a database row into the shape app.js expects.
+function toSession(row) {
+  const members = { [row.member_a]: { name: row.member_a_name, role: 'A' } };
+  const memberUids = [row.member_a];
+  if (row.member_b) {
+    members[row.member_b] = { name: row.member_b_name, role: 'B' };
+    memberUids.push(row.member_b);
+  }
+  return { status: row.status, memberUids, members };
 }
 
-// Joins a session in a transaction, so two people joining at once cannot both get the second seat.
-export async function joinSession(uid, code, name) {
-  const ref = doc(db, 'sessions', code);
-  return runTransaction(db, async (tx) => {
-    const snap = await tx.get(ref);
-    if (!snap.exists()) throw Object.assign(new Error('not_found'), { code: 'app/not-found' });
-    const data = snap.data();
-    if (data.memberUids.includes(uid)) return 'already';
-    if (data.memberUids.length >= 2) throw Object.assign(new Error('full'), { code: 'app/full' });
-    tx.update(ref, {
-      memberUids: [...data.memberUids, uid],
-      [`members.${uid}`]: { name, role: 'B' },
-      status: 'both_joined',
-    });
-    return 'joined';
-  });
-}
-
-// Live updates for the session doc. Calls back with data, null (missing), or { error }.
+// Live updates. Calls back with a session, null (not found, or not a member), or { error }.
+// Realtime respects RLS, so members get updates and everyone else gets nothing.
 export function watchSession(code, callback) {
-  return onSnapshot(
-    doc(db, 'sessions', code),
-    (snap) => callback(snap.exists() ? snap.data() : null),
-    (err) => callback({ error: err.code || 'unknown' }),
-  );
+  let channel = null;
+  let closed = false;
+
+  supabase
+    .from('sessions')
+    .select('*')
+    .eq('code', code)
+    .maybeSingle()
+    .then(({ data, error }) => {
+      if (closed) return;
+      if (error) return callback({ error: error.message });
+      callback(data ? toSession(data) : null);
+    });
+
+  channel = supabase
+    .channel(`session-${code}`)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sessions', filter: `code=eq.${code}` },
+      (payload) => { if (!closed) callback(toSession(payload.new)); })
+    .subscribe((status) => {
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') callback({ error: status });
+    });
+
+  return () => {
+    closed = true;
+    if (channel) supabase.removeChannel(channel);
+  };
 }

@@ -1,14 +1,7 @@
-// Firebase web config. Paste the values from:
-// Firebase console -> Project settings -> Your apps -> Web app -> SDK setup and configuration.
-// These values are public by design. Security comes from firestore.rules, not from hiding them.
-export const firebaseConfig = {
-  apiKey: 'REPLACE_ME',
-  authDomain: 'REPLACE_ME.firebaseapp.com',
-  projectId: 'REPLACE_ME',
-  storageBucket: 'REPLACE_ME.firebasestorage.app',
-  messagingSenderId: 'REPLACE_ME',
-  appId: 'REPLACE_ME',
-};
+// Supabase project settings. Paste from: Supabase dashboard -> Project Settings -> API.
+// The URL and anon key are public by design. Row Level Security (supabase/migrations) protects the data.
+export const SUPABASE_URL = 'https://xnbntcbjqekzlvlrstjx.supabase.co';
+export const SUPABASE_ANON_KEY = 'REPLACE_ME';
 
-// The app shows a setup screen until these are filled in.
-export const CONFIG_READY = !Object.values(firebaseConfig).some((v) => String(v).startsWith('REPLACE_ME'));
+// The app shows a setup screen until both are filled in.
+export const CONFIG_READY = !(SUPABASE_URL.startsWith('REPLACE_ME') || SUPABASE_ANON_KEY.startsWith('REPLACE_ME'));

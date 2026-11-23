@@ -4,39 +4,50 @@ Two people create one link, answer questions separately, and see their answers t
 
 ## Status
 
-- Done: questionnaire UI (100 items), create-link and join flow, waiting screen, Firestore rules for sessions and answers.
+- Done: questionnaire UI (100 items), create-link and join flow, waiting screen, database schema with Row Level Security and join/create functions.
+- Tested: the schema and RLS rules on a local Postgres (26 checks). Not yet run against a real Supabase project or in two browsers.
 - Not yet: saving answers to the shared session, the reveal screen, psychology-based matching. The questionnaire currently saves to this device only.
 
-## One-time Firebase setup
+## Stack
 
-1. In the Firebase console, create a project and add a **Web app**. Copy its config into `public/js/config.js`.
-2. **Authentication → Sign-in method → Anonymous → Enable.**
-3. **Firestore Database → Create database** (production mode).
-4. Set your project id in `.firebaserc`.
+- **Database and auth:** Supabase (Postgres, anonymous sign-in, Row Level Security, Realtime).
+- **Front end:** static HTML, CSS and ES modules in `public/`, no build step.
 
-## Deploy
+## One-time Supabase setup
+
+1. Create a Supabase project.
+2. **Authentication → Sign In / Providers → Allow anonymous sign-ins** (on).
+3. Open **SQL Editor**, paste `supabase/migrations/0001_couples_init.sql`, and run it.
+4. **Project Settings → API:** copy the Project URL and the `anon` public key into `public/js/config.js`.
+
+Keep the `service_role` key out of the front end. The app never needs it.
+
+## Test the database
+
+Against a throwaway database (not production):
 
 ```bash
-npm i -g firebase-tools
-firebase login
-firebase deploy --only firestore:rules,hosting
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/rls_test.sql
 ```
 
-## Run locally
+The test needs the `anon` and `authenticated` roles and an `auth.uid()` function. Supabase provides both. For a plain local Postgres, add stand-ins first. Every check runs inside a transaction that is rolled back.
 
-Use the emulators so no real data is touched:
+## Serve the app
+
+Any static host works. For a quick local check:
 
 ```bash
-firebase emulators:start --only firestore,hosting,auth
+python3 -m http.server 8000 --directory public
 ```
 
-Then open the Hosting URL it prints. For the emulators to be used, point `firebase.js` at them with `connectFirestoreEmulator` and `connectAuthEmulator` (not wired yet).
+Then open `http://localhost:8000`.
 
 ## How the link works
 
 - Person A enters a name and gets a link like `https://your-site/?join=ABCD2345`.
-- Person B opens it, enters a name, and joins. The session moves to `both_joined`.
-- Each person answers on their own device. Answers are never readable by the partner until the session is `revealed`, and that is enforced by `firestore.rules`, not by the UI.
+- Person B opens it, sees A's first name, enters their own name, and joins. The session moves to `both_joined`.
+- A third person who opens the link sees "This session already has two people."
+- Each person answers on their own device. The database only lets a person read the partner's answers after the session is `revealed`. That rule is enforced by Row Level Security, not by the UI.
 
 ## Before real use
 

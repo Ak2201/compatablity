@@ -1,8 +1,8 @@
-// App shell: create / join / waiting screens (Firebase), then the questionnaire.
+// App shell: create / join / waiting screens (Supabase), then the questionnaire.
 import { QUESTIONS, DIMENSIONS, LIKERT, validateQuestions } from './questions.js';
 import { CONFIG_READY } from './config.js';
-import { ensureAuth, currentUid } from './firebase.js';
-import { createSession, getSession, joinSession, watchSession, cleanCode, linkFor } from './session.js';
+import { ensureAuth, currentUid } from './supabase.js';
+import { createSession, previewSession, joinSession, watchSession, cleanCode, linkFor } from './session.js';
 
 validateQuestions();
 
@@ -94,12 +94,12 @@ function showError(message, { action = 'Start again', onAction } = {}) {
 function renderSetup() {
   setHTML(`
     <section class="card">
-      <h1>Connect Firebase first</h1>
-      <p class="lead">This app needs a Firebase project before two people can share a link.</p>
+      <h1>Connect Supabase first</h1>
+      <p class="lead">This app needs a Supabase project before two people can share a link.</p>
       <ol class="steps">
-        <li><span class="n">1</span><span>Create a project, add a Web app, and copy its config into <code>public/js/config.js</code>.</span></li>
-        <li><span class="n">2</span><span>Turn on <b>Authentication → Anonymous</b> sign-in.</span></li>
-        <li><span class="n">3</span><span>Create a <b>Firestore</b> database, then deploy <code>firestore.rules</code>.</span></li>
+        <li><span class="n">1</span><span>Copy the Project URL and anon key into <code>public/js/config.js</code>.</span></li>
+        <li><span class="n">2</span><span>Turn on <b>Authentication → Sign In / Providers → Allow anonymous sign-ins</b>.</span></li>
+        <li><span class="n">3</span><span>Run <code>supabase/migrations/0001_couples_init.sql</code> in the SQL editor.</span></li>
       </ol>
       <p class="ref-note">See README.md for the exact commands.</p>
     </section>`);
@@ -152,20 +152,20 @@ function renderLanding(notice) {
 async function renderJoin(code) {
   state.screen = 'join';
   setHTML(`<section class="card done"><div class="big" aria-hidden="true">♡</div><p class="lead">Opening your invitation…</p></section>`);
-  let s;
+  let preview;
   try {
-    const uid = await ensureAuth();
-    s = await getSession(code);
-    if (!s) return showError('We could not find that link. Ask your partner to send it again.', { action: 'Start my own', onAction: () => { forgetPointer(); renderLanding(); } });
-    if (s.memberUids.includes(uid)) return attach(code);
+    await ensureAuth();
+    preview = await previewSession(code);
   } catch (err) {
     console.error(err);
     return showError('We could not open that link. Check your connection and try again.');
   }
-  if (s.memberUids.length >= 2) {
+  if (!preview) return showError('We could not find that link. Ask your partner to send it again.', { action: 'Start my own', onAction: () => { forgetPointer(); renderLanding(); } });
+  if (preview.isMember) return attach(code);
+  if (preview.isFull) {
     return showError('This session already has two people. Ask your partner to start a new link.', { action: 'Start my own', onAction: () => { forgetPointer(); renderLanding(); } });
   }
-  const host = Object.values(s.members)[0]?.name || 'Your partner';
+  const host = preview.hostName || 'Your partner';
   setHTML(`
     <section class="card hero">
       <div class="heart" aria-hidden="true">♡</div>
@@ -467,7 +467,7 @@ async function boot() {
   // Sign in first on every path, so the session listener always has an identity.
   try { await ensureAuth(); } catch (err) {
     console.error(err);
-    return showError('We could not connect. Check your internet connection, and that anonymous sign-in is turned on in Firebase.');
+    return showError('We could not connect. Check your internet connection, and that anonymous sign-ins are allowed in Supabase.');
   }
 
   const joinCode = cleanCode(new URLSearchParams(location.search).get('join'));
