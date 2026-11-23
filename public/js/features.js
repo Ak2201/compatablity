@@ -37,7 +37,8 @@ export async function listConnectionsV2() {
   return (data || []).map((r) => ({
     id: r.id,
     code: r.code,
-    partnerName: r.partner_name,
+    // Older sessions can have a partner without a profile name yet.
+    partnerName: r.partner_name || 'Partner',
     partnerGender: r.partner_gender,
     myGender: r.my_gender,
     myShare: !!r.my_share,
