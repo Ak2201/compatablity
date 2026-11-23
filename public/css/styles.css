@@ -221,6 +221,15 @@ textarea.text { min-height: 120px; resize: vertical; }
 .btn-row.stack { flex-direction: column; }
 code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; }
 
+/* ---------- Invite banner (creator, partner not joined yet) ---------- */
+.invite-banner {
+  display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; justify-content: space-between;
+  background: var(--warn-soft); color: var(--ink); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+  border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 14px; font-size: 14px;
+}
+.btn-sm { min-height: 40px; padding: 8px 14px; font-size: 14px; width: auto; }
+.invite-banner .btn-sm { flex: 0 0 auto; }
+
 /* ---------- Small screens ---------- */
 @media (max-width: 420px) {
   .question { font-size: 19px; }

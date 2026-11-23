@@ -109,7 +109,24 @@ function flashSaved() {
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const scoredTotal = () => QUESTIONS.filter((q) => q.type !== 'text').length;
 const scoredAnswered = () => QUESTIONS.filter((q) => q.type !== 'text' && state.answers[q.id] !== undefined).length;
-const setHTML = (html) => { app.innerHTML = html; };
+// The creator sees an invite banner on the questionnaire screens until the partner joins.
+const bannerNeeded = () => state.role === 'A' && !state.partnerName && !!state.sessionCode
+  && ['questions', 'done', 'submitted'].includes(state.screen);
+const inviteBanner = () => `
+  <div class="invite-banner" role="status">
+    <span><strong>Waiting for your partner to join.</strong> You can keep answering in the meantime.</span>
+    <button class="btn btn-ghost btn-sm" type="button" data-copy="${esc(linkFor(state.sessionCode))}">Copy invite link</button>
+  </div>`;
+const setHTML = (html) => { app.innerHTML = (bannerNeeded() ? inviteBanner() : '') + html; };
+
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-copy]');
+  if (!btn) return;
+  navigator.clipboard?.writeText(btn.dataset.copy).then(
+    () => { btn.textContent = 'Copied ✓'; setTimeout(() => { btn.textContent = 'Copy invite link'; }, 2000); },
+    () => { btn.textContent = 'Copy failed. Select the link manually.'; },
+  );
+});
 
 function areaBlocks() {
   const blocks = [];
@@ -302,16 +319,13 @@ function onSession(code, s) {
   state.role = me.role;
   state.myName = me.name;
   const partner = Object.entries(s.members).find(([id]) => id !== uid)?.[1];
+  const hadPartner = !!state.partnerName;
   state.partnerName = partner?.name || null;
   state.sessionStatus = s.status;
   savePointer(code, me.role);
 
-  if (s.memberUids.length < 2) {
-    if (state.screen !== 'waiting') renderWaiting();
-    return;
-  }
-
-  // Both are in. Start the questionnaire once; later snapshots do not reset progress.
+  // The creator can answer straight away. The partner's seat is shown as a banner until they join.
+  // Later snapshots do not reset progress.
   if (!state.started) {
     state.started = true;
     loadDraft(code);
@@ -320,6 +334,9 @@ function onSession(code, s) {
     hydrateFromServer(code);
     return;
   }
+  // Partner just joined: refresh the screen so the invite banner goes away.
+  if (!hadPartner && state.partnerName && state.screen !== 'reveal') render();
+
   // Partner status changed. Once both have submitted, the session is revealed.
   if (s.status === 'revealed' && state.screen !== 'reveal' && state.locked) return startReveal();
   if (state.screen === 'submitted') renderSubmitted();

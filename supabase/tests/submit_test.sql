@@ -48,8 +48,15 @@ begin
 
   perform pg_temp.as_user(a);
   v_code := public.create_session('Maya');
-  perform pg_temp.check_error('submit: refused before the second person joins',
-    format($$select public.submit_answers('%s', '{"a":1}')$$, v_code), 'not_full');
+  -- The creator can submit before anyone joins. The reveal waits for both.
+  perform pg_temp.check_eq('submit: creator can submit before the partner joins',
+    public.submit_answers(v_code, '{"a":1}'), 'submitted');
+  perform pg_temp.check_eq('submit: solo submit keeps the session waiting',
+    (select status from public.sessions where code = v_code), 'waiting_for_partner');
+  -- Reset the creator's row so the rest of the test runs from a clean state.
+  perform pg_temp.as_admin();
+  delete from public.answers where session_code = v_code;
+  perform pg_temp.as_user(a);
 
   perform pg_temp.as_user(b);
   perform public.join_session(v_code, 'Sam');
