@@ -5,7 +5,7 @@ import { supabase } from './supabase.js';
 
 export { computePair, buildRankings, pendingList } from './rankings.js';
 
-const BANKS = ['couple', 'friendship', 'self'];
+const BANKS = ['couple', 'friendship', 'self', 'wellbeing'];
 
 // ---- own answers ----
 

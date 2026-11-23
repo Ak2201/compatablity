@@ -18,6 +18,8 @@ import { navSet, navRoot } from './nav.js';
 import { SELF_QUESTIONS, SELF_DIMENSIONS } from './self-questions.js';
 import { renderSelfEditor, renderSelfReport } from './self-screens.js';
 import { selfProfile, compareSelf } from './self-profile.js';
+import { renderWellbeingEditor, renderWellbeingView } from './wellbeing-screens.js';
+import { wellbeingSummary } from './wellbeing-profile.js';
 
 const BANK_QUESTIONS = { couple: QUESTIONS, friendship: FRIEND_QUESTIONS };
 
@@ -167,11 +169,13 @@ export async function showHome(extra = {}) {
   ctx.el.insertAdjacentHTML('beforeend',
     '<p style="text-align:center;margin:16px 0;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">'
     + '<button class="btn btn-primary btn-sm" type="button" data-self>My personal profile</button>'
+    + '<button class="btn btn-ghost btn-sm" type="button" data-wellbeing>Private check-in</button>'
     + '<button class="btn btn-ghost btn-sm" type="button" data-psych>Psychology guide</button>'
     + (ctx.onLegacyDashboard ? '<button class="btn btn-ghost btn-sm" type="button" data-older>Older sessions</button>' : '')
     + '</p>');
   ctx.el.querySelector('[data-psych]')?.addEventListener('click', showPsychology);
   ctx.el.querySelector('[data-self]')?.addEventListener('click', showSelfReport);
+  ctx.el.querySelector('[data-wellbeing]')?.addEventListener('click', showWellbeing);
   ctx.el.querySelector('[data-older]')?.addEventListener('click', ctx.onLegacyDashboard);
 }
 
@@ -270,6 +274,28 @@ async function showPsychology() {
     patterns: personalPatterns(history),
     glossary: Object.entries(GLOSSARY).map(([term, plain]) => ({ term, plain })),
     onBack: () => showHome(),
+  });
+}
+
+// ---------- private wellbeing check-in (never shared with connections) ----------
+function showWellbeing() {
+  navSet('wellbeing', () => showWellbeing());
+  const answers = cache?.mine?.wellbeing || {};
+  const saveAnswers = (next) => {
+    if (cache) cache.mine.wellbeing = next;
+    return saveMyProfileAnswers(currentUid(), 'wellbeing', next).catch((err) => console.error(err));
+  };
+  const editor = () => renderWellbeingEditor(ctx.el, {
+    answers,
+    onSave: saveAnswers,
+    onBack: () => showHome(),
+  });
+  const summary = wellbeingSummary(answers);
+  if (summary.completion.answered === 0) return editor();
+  renderWellbeingView(ctx.el, {
+    answers: cache?.mine?.wellbeing || answers,
+    onBack: () => showHome(),
+    onEdit: editor,
   });
 }
 
