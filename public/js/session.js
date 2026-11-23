@@ -43,12 +43,17 @@ export async function saveProfile(uid, { display_name, gender }) {
 
 // Every session this account is in, newest first. RLS limits the rows to the ones you belong to.
 export async function listMySessions(uid) {
-  const { data, error } = await supabase
-    .from('sessions')
-    .select('code, status, kind, member_a, member_a_name, member_a_gender, member_b, member_b_name, member_b_gender, created_at')
-    .order('created_at', { ascending: false });
+  const [{ data, error }, { data: hiddenRows, error: hiddenError }] = await Promise.all([
+    supabase
+      .from('sessions')
+      .select('code, status, kind, member_a, member_a_name, member_a_gender, member_b, member_b_name, member_b_gender, created_at')
+      .order('created_at', { ascending: false }),
+    supabase.from('session_hidden').select('session_code'),
+  ]);
   if (error) throw error;
-  return (data || []).map((row) => {
+  if (hiddenError) throw hiddenError;
+  const hidden = new Set((hiddenRows || []).map((r) => r.session_code));
+  return (data || []).filter((row) => !hidden.has(row.code)).map((row) => {
     const isA = row.member_a === uid;
     return {
       code: row.code,
@@ -159,6 +164,39 @@ export async function loadAllAnswers(code) {
     .eq('session_code', code);
   if (error) throw error;
   return data || [];
+}
+
+// The most recent locked answers of this account for the given bank keys. Used to reuse one set of answers
+// with every partner. Returns the answers object or null.
+export async function loadLatestLockedAnswers(uid, keyPrefixes) {
+  const { data, error } = await supabase
+    .from('answers')
+    .select('answers, updated_at')
+    .eq('user_id', uid)
+    .eq('locked', true)
+    .order('updated_at', { ascending: false })
+    .limit(20);
+  if (error) throw error;
+  const match = (data || []).find((row) => {
+    const keys = Object.keys(row.answers || {});
+    return keys.some((k) => keyPrefixes.some((p) => k.startsWith(p)));
+  });
+  return match ? match.answers : null;
+}
+
+// Removes a session from your own dashboard. The session and your partner's view stay as they are.
+export async function hideSession(uid, code) {
+  const { error } = await supabase.from('session_hidden').insert({ session_code: code, user_id: uid });
+  if (error) throw error;
+}
+
+// Your revealed pairs (couple and friendship) that you started, as { code, kind, partnerName, partnerGender }.
+// Partner answers can be read after reveal.
+export async function listRevealedPairs(uid) {
+  const sessions = await listMySessions(uid);
+  return sessions
+    .filter((s) => s.status === 'revealed' && s.role === 'A' && s.partnerName)
+    .map((s) => ({ code: s.code, kind: s.kind, partnerName: s.partnerName, partnerGender: s.partnerGender }));
 }
 
 // Final submit. Locks your row. Returns 'submitted', or 'locked' when both people have now locked.

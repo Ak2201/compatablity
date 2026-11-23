@@ -6,7 +6,9 @@ import { CONFIG_READY } from './config.js';
 import { ensureAuth, currentUid, sendMagicLink, signOut, anonymousUserId, attachEmail } from './supabase.js';
 import { createSession, previewSession, joinSession, watchSession, cleanCode, linkFor,
   loadMyAnswers, saveMyAnswers, submitAnswers, loadAllAnswers,
-  getProfile, saveProfile, listMySessions } from './session.js';
+  getProfile, saveProfile, listMySessions, loadLatestLockedAnswers, listRevealedPairs, hideSession } from './session.js';
+import { renderCompare } from './compare.js';
+import { computeFriendshipReport as friendReport } from './friend-psychology.js';
 import { computeReport } from './psychology.js';
 
 import { renderReveal, renderRevealWaiting } from './reveal.js';
@@ -103,10 +105,34 @@ async function pushAnswers() {
 }
 
 // On start, the server copy is the record. Local edits that have not synced yet still win.
+// Answer keys per bank, used to find an earlier set of answers of the same kind.
+const COUPLE_PREFIXES = ['comm.', 'life.', 'aff.', 'val.', 'soc.', 'con.', 'att.', 'money.', 'goals.', 'dec.', 'deal.', 'ref.'];
+const FRIEND_PREFIXES = ['fr.'];
+
+// Reuse: a new session starts with the answers you already locked for this kind, so you answer once.
+async function prefillFromEarlierAnswers() {
+  try {
+    const prefixes = activeKind === 'friendship' ? FRIEND_PREFIXES : COUPLE_PREFIXES;
+    const earlier = await loadLatestLockedAnswers(currentUid(), prefixes);
+    if (!earlier) return false;
+    state.answers = { ...earlier, ...state.answers };
+    state.prefilled = true;
+    state.index = QS().length;
+    state.screen = 'done';
+    return true;
+  } catch (err) {
+    console.error(err);
+    return false;
+  }
+}
+
 async function hydrateFromServer(code) {
   try {
     const row = await loadMyAnswers(code, currentUid());
-    if (!row) return;
+    if (!row) {
+      if (await prefillFromEarlierAnswers()) render();
+      return;
+    }
     state.answers = { ...row.answers, ...state.answers };
     if (row.locked) {
       state.locked = true;
@@ -216,6 +242,47 @@ async function doSignOut() {
   renderLoginScreen();
 }
 
+// ---------- compare your partners (private to you) ----------
+async function renderCompareScreen() {
+  state.screen = 'compare';
+  loadingCard('Comparing your partners…');
+  try {
+    const uid = currentUid();
+    const pairs = await listRevealedPairs(uid);
+    const items = [];
+    for (const pair of pairs) {
+      const rows = await loadAllAnswers(pair.code);
+      const mine = rows.find((r) => r.user_id === uid);
+      const theirs = rows.find((r) => r.user_id !== uid);
+      if (!mine || !theirs) continue;
+      const opts = { myRole: 'A', myName: state.profile?.display_name, partnerName: pair.partnerName };
+      const report = pair.kind === 'friendship'
+        ? friendReport(mine.answers || {}, theirs.answers || {}, opts)
+        : computeReport(mine.answers || {}, theirs.answers || {}, opts);
+      items.push({
+        code: pair.code,
+        kind: pair.kind,
+        partnerName: pair.partnerName,
+        partnerGender: pair.partnerGender,
+        score: report.overall?.score ?? null,
+        band: report.overall?.band || { key: 'unknown', label: 'Not enough answers', blurb: '' },
+        strengths: (report.strengths || []).slice(0, 3),
+        topics: (report.topics || []).slice(0, 2),
+        areas: (report.areas || []).filter((a) => a.score != null).map((a) => ({ title: a.title, score: a.score })),
+      });
+    }
+    renderCompare(app, {
+      myName: state.profile?.display_name || '',
+      items,
+      onBack: renderDashboardScreen,
+      onOpen: (code) => attach(code),
+    });
+  } catch (err) {
+    console.error(err);
+    showError('We could not load your comparison. Check your connection and try again.', { action: 'Back to my sessions', onAction: renderDashboardScreen });
+  }
+}
+
 // Runs after sign-in: profile first, then a pending join link, then the dashboard.
 async function routeSignedIn() {
   loadingCard();
@@ -270,6 +337,18 @@ async function renderDashboardScreen() {
     },
     onSignOut: doSignOut,
     onEditProfile: () => renderProfileScreen(false),
+    onCompare: renderCompareScreen,
+    onRemove: async (code) => {
+      try {
+        await hideSession(currentUid(), code);
+        if (state.sessionCode === code) state.sessionCode = null;
+        forgetPointer();
+        renderDashboardScreen();
+      } catch (err) {
+        console.error(err);
+        saveState.textContent = 'Could not remove that session. Try again.';
+      }
+    },
   });
 }
 
@@ -591,6 +670,7 @@ function renderDone() {
       <p class="lead">Once you submit, your answers are locked. Your partner's stay hidden until you both have submitted.</p>
       <div class="stat">${scoredAnswered()} of ${scoredTotal()} scored questions answered (${pct}%)</div>
       ${unanswered > 0 ? `<p class="ref-note">${unanswered} question${unanswered > 1 ? 's are' : ' is'} still unanswered. Go back to answer ${unanswered > 1 ? 'them' : 'it'}.</p>` : ''}
+      ${state.prefilled ? '<p class="ref-note">Filled in from the answers you already gave. Check them, then submit.</p>' : ''}
       <p class="ref-note" id="submitNote" hidden></p>
       <div class="btn-row stack">
         <button class="btn btn-primary" id="submit" ${unanswered > 0 ? 'disabled' : ''}>Submit my answers</button>

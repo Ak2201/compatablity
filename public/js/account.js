@@ -274,7 +274,10 @@ function sessionCard(s, i, myFallbackName) {
       </div>
       <div class="ac-session-foot">
         <span class="ac-code">Code <code>${esc(s.code)}</code></span>
-        <button class="btn btn-ghost btn-sm" type="button" data-open="${esc(s.code)}" aria-label="${esc(openLabel)}">Open ${ICON.arrow}</button>
+        <span class="ac-session-actions">
+          <button class="btn btn-ghost btn-sm" type="button" data-remove="${esc(s.code)}" aria-label="Remove this session from my list">Remove</button>
+          <button class="btn btn-ghost btn-sm" type="button" data-open="${esc(s.code)}" aria-label="${esc(openLabel)}">Open ${ICON.arrow}</button>
+        </span>
       </div>
     </li>`;
 }
@@ -286,7 +289,10 @@ const EMPTY_ART = `
     <path class="ac-art-h" d="M56 45.5c-5.6-3.9-8.4-7-8.4-10.4 0-2.6 2-4.6 4.5-4.6 1.6 0 3 .8 3.9 2.1.9-1.3 2.3-2.1 3.9-2.1 2.5 0 4.5 2 4.5 4.6 0 3.4-2.8 6.5-8.4 10.4z"/>
   </svg>`;
 
-export function renderDashboard(el, { profile, sessions, onNew, onOpen, onJoinLink, onSignOut, onEditProfile } = {}) {
+// Revealed couple sessions you started: the pairs you can compare.
+const pairCountFor = (sessions) => (sessions || []).filter((s) => s.status === 'revealed' && s.role === 'A').length;
+
+export function renderDashboard(el, { profile, sessions, onNew, onOpen, onJoinLink, onSignOut, onEditProfile, onCompare, onRemove } = {}) {
   const name = profile?.display_name ? String(profile.display_name).trim() : '';
   const genderText = GENDER_LABEL[profile?.gender] ?? '';
   const list = Array.isArray(sessions) ? sessions : [];
@@ -320,6 +326,7 @@ export function renderDashboard(el, { profile, sessions, onNew, onOpen, onJoinLi
         </form>
       </section>
 
+      ${pairCountFor(list) >= 2 && onCompare ? `<button class="btn btn-ghost ac-enter" type="button" data-compare style="--i:1">Compare my partners (${pairCountFor(list)})</button>` : ''}
       <div class="ac-section-head ac-enter" style="--i:1">
         <h2 id="ac-sessions-h">Your sessions</h2>
         ${list.length ? `<span class="ac-count-pill">${list.length} ${list.length === 1 ? 'session' : 'sessions'}</span>` : ''}
@@ -335,6 +342,7 @@ export function renderDashboard(el, { profile, sessions, onNew, onOpen, onJoinLi
       </nav>
     </div>`;
 
+  el.querySelector('[data-compare]')?.addEventListener('click', () => onCompare?.());
   const newError = el.querySelector('[data-new-error]');
   el.querySelectorAll('[data-new]').forEach((newBtn) => {
     newBtn.addEventListener('click', () => {
@@ -362,6 +370,13 @@ export function renderDashboard(el, { profile, sessions, onNew, onOpen, onJoinLi
 
   el.querySelectorAll('[data-open]').forEach((b) => {
     b.addEventListener('click', () => onOpen?.(b.dataset.open));
+  });
+  // Removes the session from your own list only. The confirm step is plain: the partner keeps it.
+  el.querySelectorAll('[data-remove]').forEach((b) => {
+    b.addEventListener('click', () => {
+      if (!window.confirm('Remove this session from your list? Your partner keeps it, and no answers are deleted.')) return;
+      onRemove?.(b.dataset.remove);
+    });
   });
   el.querySelector('[data-edit]').addEventListener('click', () => onEditProfile?.());
   el.querySelector('[data-signout]').addEventListener('click', () => onSignOut?.());
