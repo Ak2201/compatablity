@@ -67,15 +67,15 @@ test('high anxiety lowers the score compared with low anxiety', () => {
   assert.equal(areaLevel(worried, 'Worry and tension'), 'strained');
 });
 
-test('wb.safety frequent sets the safety flag and the text starts with SUPPORT_NOTE', () => {
+test('wb.safety frequent sets the safety flag; the support note is shown on the view, not in the text', () => {
   const r = wellbeingSummary(scoredAnswers(HIGH, 'frequent'));
   assert.equal(r.flags.safety, 'frequent');
-  assert.ok(r.text.startsWith(SUPPORT_NOTE), r.text);
+  assert.ok(!r.text.includes(SUPPORT_NOTE), 'the note is not duplicated in the text');
   assert.equal(r.level, 'steady', 'the safety answer does not change the level');
 
   const sparse = wellbeingSummary({ 'wb.safety.thoughts': 'frequent' });
   assert.equal(sparse.flags.safety, 'frequent');
-  assert.ok(sparse.text.startsWith(SUPPORT_NOTE));
+  assert.ok(!sparse.text.includes(SUPPORT_NOTE));
 });
 
 test('wb.safety passing sets the passing flag, and no sets none', () => {
