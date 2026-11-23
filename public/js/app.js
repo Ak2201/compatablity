@@ -3,7 +3,7 @@ import { QUESTIONS as COUPLE_Q, DIMENSIONS as COUPLE_D, LIKERT, validateQuestion
 import { FRIEND_QUESTIONS, FRIEND_DIMENSIONS, validateFriendQuestions } from './friend-questions.js';
 import { computeFriendshipReport } from './friend-psychology.js';
 import { CONFIG_READY } from './config.js';
-import { ensureAuth, currentUid, sendMagicLink, signOut } from './supabase.js';
+import { ensureAuth, currentUid, sendMagicLink, signOut, anonymousUserId, attachEmail } from './supabase.js';
 import { createSession, previewSession, joinSession, watchSession, cleanCode, linkFor,
   loadMyAnswers, saveMyAnswers, submitAnswers, loadAllAnswers,
   getProfile, saveProfile, listMySessions } from './session.js';
@@ -653,6 +653,49 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+// ---------- keep your sessions: attach an email to an anonymous account ----------
+function renderKeepSessions() {
+  state.screen = 'keep';
+  setHTML(`
+    <section class="card hero">
+      <div class="heart" aria-hidden="true">♡</div>
+      <h1>Keep your sessions</h1>
+      <p class="lead">Your sessions and answers are saved to this browser's account. Add your email, so you can sign in from any browser later. Your data stays exactly where it is.</p>
+      <label class="field" for="keep-email">Your email</label>
+      <input id="keep-email" class="text" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com">
+      <p class="ref-note" id="keep-note" role="status" aria-live="polite"></p>
+      <div class="btn-row stack">
+        <button class="btn btn-primary" id="keep-send" disabled>Send confirmation link</button>
+      </div>
+      <p class="ref-note">Opening the link from your email confirms it. Use the same browser to finish this step.</p>
+    </section>`);
+
+  const input = document.getElementById('keep-email');
+  const send = document.getElementById('keep-send');
+  const note = document.getElementById('keep-note');
+  const sync = () => { send.disabled = !/^\S+@\S+\.\S+$/.test(input.value.trim()); };
+  input.addEventListener('input', sync);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !send.disabled) send.click(); });
+  send.addEventListener('click', async () => {
+    send.disabled = true;
+    send.textContent = 'Sending…';
+    note.textContent = '';
+    try {
+      await attachEmail(input.value.trim());
+      note.textContent = `We sent a link to ${input.value.trim()}. Open it to finish.`;
+      send.textContent = 'Link sent';
+    } catch (err) {
+      console.error(err);
+      send.disabled = false;
+      send.textContent = 'Send confirmation link';
+      note.textContent = /already|registered|exists/i.test(err.message || '')
+        ? 'That email is already used by another account. Use a different email.'
+        : 'We could not send the link. Check the email and try again.';
+    }
+  });
+  input.focus();
+}
+
 // ---------- boot ----------
 async function boot() {
   if (!CONFIG_READY) return renderSetup();
@@ -669,6 +712,9 @@ async function boot() {
     return showError('We could not connect. Check your internet connection and try again.');
   }
   if (!uid) {
+    // An account from before email sign-in: add an email so its sessions and answers stay reachable.
+    const anon = await anonymousUserId();
+    if (anon) return renderKeepSessions();
     return renderLoginScreen(pendingJoin() ? 'Sign in to join your partner\'s session. Your link is kept.' : null);
   }
   return routeSignedIn();

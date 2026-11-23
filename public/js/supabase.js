@@ -35,6 +35,23 @@ export async function sendMagicLink(address) {
   if (error) throw error;
 }
 
+// If this browser holds an anonymous account (created before email sign-in), returns its id. Otherwise null.
+export async function anonymousUserId() {
+  const { data } = await supabase.auth.getSession();
+  const user = data.session?.user;
+  return user && user.is_anonymous ? user.id : null;
+}
+
+// Attaches an email to the current anonymous account. The same account id keeps its sessions and answers.
+// Supabase sends a confirmation link; opening it signs the person in as a normal email account.
+export async function attachEmail(address) {
+  const { error } = await supabase.auth.updateUser(
+    { email: address },
+    { emailRedirectTo: location.origin + location.pathname },
+  );
+  if (error) throw error;
+}
+
 export async function signOut() {
   await supabase.auth.signOut();
   uid = null;
