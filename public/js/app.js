@@ -14,6 +14,7 @@ import { computeReport } from './psychology.js';
 import { renderReveal, renderRevealWaiting } from './reveal.js';
 import { buildInsights } from './insights.js';
 import { renderDashboard as renderResultsDashboard } from './dashboard.js';
+import { startHome } from './home-flow.js';
 import { renderLogin, renderCheckEmail, renderProfile, renderDashboard } from './account.js';
 
 validateQuestions();
@@ -293,12 +294,18 @@ async function routeSignedIn() {
     return showError('We could not load your profile. Check your connection and try again.');
   }
   if (!state.profile) return renderProfileScreen(true);
+  // The new home: rankings, people (your code and connections), and your answers.
+  // A join code from the link is accepted first; older session codes fall back to the classic join.
   const pending = pendingJoin();
-  if (pending) {
-    clearPendingJoin();
-    return renderJoinConfirm(pending);
-  }
-  return renderDashboardScreen();
+  if (pending) clearPendingJoin();
+  state.screen = 'home';
+  return startHome(app, {
+    profile: state.profile,
+    pendingCode: pending,
+    onLegacyJoin: renderJoinConfirm,
+    onLegacyDashboard: renderDashboardScreen,
+    onSignOut: doSignOut,
+  });
 }
 
 function renderProfileScreen(first) {
@@ -490,6 +497,7 @@ async function startReveal() {
     }
     const partnerLabel = state.partnerName || (activeKind === 'friendship' ? 'Your friend' : 'Your partner');
     if (insights) {
+      window.scrollTo(0, 0);
       renderResultsDashboard(app, {
         report,
         insights,
