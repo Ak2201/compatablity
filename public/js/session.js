@@ -85,3 +85,34 @@ export function watchSession(code, callback) {
     if (channel) supabase.removeChannel(channel);
   };
 }
+
+// ---- answers ----
+// Your own row only. The database refuses to show your partner's row until the session is revealed.
+export async function loadMyAnswers(code, uid) {
+  const { data, error } = await supabase
+    .from('answers')
+    .select('answers, locked')
+    .eq('session_code', code)
+    .eq('user_id', uid)
+    .maybeSingle();
+  if (error) throw error;
+  return data; // null, or { answers, locked }
+}
+
+// Saves a draft. Refused by the database once your row is locked.
+export async function saveMyAnswers(code, uid, answers) {
+  const { error } = await supabase
+    .from('answers')
+    .upsert(
+      { session_code: code, user_id: uid, answers, updated_at: new Date().toISOString() },
+      { onConflict: 'session_code,user_id' },
+    );
+  if (error) throw error;
+}
+
+// Final submit. Locks your row. Returns 'submitted', or 'locked' when both people have now locked.
+export async function submitAnswers(code, answers) {
+  const { data, error } = await supabase.rpc('submit_answers', { p_code: code, p_answers: answers });
+  if (error) throw error;
+  return data;
+}

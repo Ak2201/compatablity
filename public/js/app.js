@@ -2,7 +2,8 @@
 import { QUESTIONS, DIMENSIONS, LIKERT, validateQuestions } from './questions.js';
 import { CONFIG_READY } from './config.js';
 import { ensureAuth, currentUid } from './supabase.js';
-import { createSession, previewSession, joinSession, watchSession, cleanCode, linkFor } from './session.js';
+import { createSession, previewSession, joinSession, watchSession, cleanCode, linkFor,
+  loadMyAnswers, saveMyAnswers, submitAnswers } from './session.js';
 
 validateQuestions();
 
@@ -22,6 +23,9 @@ const state = {
   answers: {},
   introSeen: {},
   unsub: null,
+  locked: false,       // true once your answers are submitted (locked on the server)
+  sessionStatus: null, // mirrors sessions.status
+  saveTimer: null,
 };
 
 // ---------- local storage (per device, try/catch wrapped) ----------
@@ -52,6 +56,43 @@ function saveDraft() {
     flashSaved();
   } catch {
     saveState.textContent = 'Not saved (storage off)';
+  }
+  scheduleServerSave();
+}
+
+// Drafts also go to the shared session, debounced so each tap does not make a request.
+function scheduleServerSave() {
+  if (state.locked) return;
+  clearTimeout(state.saveTimer);
+  state.saveTimer = setTimeout(pushAnswers, 600);
+}
+async function pushAnswers() {
+  if (!state.sessionCode || state.locked) return;
+  try {
+    await saveMyAnswers(state.sessionCode, currentUid(), state.answers);
+    saveState.textContent = 'Saved to the shared session';
+  } catch (err) {
+    console.error(err);
+    saveState.textContent = 'Not synced yet. Retrying…';
+    clearTimeout(state.saveTimer);
+    state.saveTimer = setTimeout(pushAnswers, 5000);
+  }
+}
+
+// On start, the server copy is the record. Local edits that have not synced yet still win.
+async function hydrateFromServer(code) {
+  try {
+    const row = await loadMyAnswers(code, currentUid());
+    if (!row) return;
+    state.answers = { ...row.answers, ...state.answers };
+    if (row.locked) {
+      state.locked = true;
+      state.screen = 'submitted';
+      render();
+    }
+  } catch (err) {
+    console.error(err);
+    saveState.textContent = 'Could not load your saved answers. Working from this device.';
   }
 }
 let flashTimer;
@@ -259,6 +300,7 @@ function onSession(code, s) {
   state.myName = me.name;
   const partner = Object.entries(s.members).find(([id]) => id !== uid)?.[1];
   state.partnerName = partner?.name || null;
+  state.sessionStatus = s.status;
   savePointer(code, me.role);
 
   if (s.memberUids.length < 2) {
@@ -272,7 +314,11 @@ function onSession(code, s) {
     loadDraft(code);
     state.screen = state.index >= QUESTIONS.length ? 'done' : 'questions';
     render();
+    hydrateFromServer(code);
+    return;
   }
+  // Partner status changed while you are on the submitted screen.
+  if (state.screen === 'submitted') renderSubmitted();
 }
 
 // ---------- questionnaire ----------
@@ -408,25 +454,70 @@ function goBack() {
   render();
 }
 
+// Finish screen: check everything is answered, then submit (which locks your answers).
 function renderDone() {
+  if (state.locked) return renderSubmitted();
   state.screen = 'done';
+  const unanswered = scoredTotal() - scoredAnswered();
   const pct = Math.round((scoredAnswered() / scoredTotal()) * 100);
-  const partner = state.partnerName || 'your partner';
   setHTML(`
     <section class="card done">
       <div class="big" aria-hidden="true">✓</div>
-      <h1>Thanks, ${esc(state.myName)}. Your answers are in.</h1>
-      <p class="lead">Waiting for ${esc(partner)} to finish. Nobody sees the other's answers until you both have finished.</p>
+      <h1>Thanks, ${esc(state.myName)}. Ready to submit?</h1>
+      <p class="lead">Once you submit, your answers are locked. Your partner's stay hidden until you both have submitted.</p>
       <div class="stat">${scoredAnswered()} of ${scoredTotal()} scored questions answered (${pct}%)</div>
-      <div class="btn-row"><button class="btn btn-ghost" id="review">Review my answers</button></div>
-      <p class="ref-note">Saving answers to the shared session and the reveal are the next steps.</p>
+      ${unanswered > 0 ? `<p class="ref-note">${unanswered} question${unanswered > 1 ? 's are' : ' is'} still unanswered. Go back to answer ${unanswered > 1 ? 'them' : 'it'}.</p>` : ''}
+      <p class="ref-note" id="submitNote" hidden></p>
+      <div class="btn-row stack">
+        <button class="btn btn-primary" id="submit" ${unanswered > 0 ? 'disabled' : ''}>Submit my answers</button>
+        <button class="btn btn-ghost" id="review">Review my answers</button>
+      </div>
     </section>`);
+
   document.getElementById('review').addEventListener('click', () => {
     state.index = 0;
     state.screen = 'questions';
     saveDraft();
     render();
   });
+  document.getElementById('submit').addEventListener('click', submitNow);
+}
+
+async function submitNow() {
+  const btn = document.getElementById('submit');
+  const note = document.getElementById('submitNote');
+  btn.disabled = true;
+  btn.textContent = 'Submitting…';
+  try {
+    clearTimeout(state.saveTimer);
+    await saveMyAnswers(state.sessionCode, currentUid(), state.answers);
+    await submitAnswers(state.sessionCode, state.answers);
+    state.locked = true;
+    renderSubmitted();
+  } catch (err) {
+    console.error(err);
+    btn.disabled = false;
+    btn.textContent = 'Submit my answers';
+    note.hidden = false;
+    note.textContent = 'Could not submit. Check your connection and try again. Your answers are still saved on this device.';
+  }
+}
+
+// Shown once your answers are locked. Partner's answers stay hidden until the reveal.
+function renderSubmitted() {
+  state.screen = 'submitted';
+  const partner = state.partnerName || 'your partner';
+  const bothDone = state.sessionStatus === 'locked' || state.sessionStatus === 'revealed';
+  setHTML(`
+    <section class="card done">
+      <div class="big" aria-hidden="true">${bothDone ? '🎉' : '🔒'}</div>
+      <h1>${bothDone ? 'You both finished' : 'Your answers are locked'}</h1>
+      <p class="lead">${bothDone
+        ? 'Both of you have submitted. The reveal of your answers and your match report comes next.'
+        : `Waiting for ${esc(partner)} to submit. Their answers stay hidden until you both have finished.`}</p>
+      <div class="stat">${scoredAnswered()} of ${scoredTotal()} scored questions submitted</div>
+      <p class="ref-note">Nothing you can change now. Keep this page open, or come back on this device.</p>
+    </section>`);
 }
 
 function areaIcon(dimension) {
@@ -435,6 +526,7 @@ function areaIcon(dimension) {
 
 // ---------- render loop ----------
 function render() {
+  if (state.screen === 'submitted') return renderSubmitted();
   if (state.screen === 'done') return renderDone();
   const block = blockOf(state.index);
   if (block && block.items[0] === state.index && !state.introSeen[block.dimension]) return renderIntro(block);
