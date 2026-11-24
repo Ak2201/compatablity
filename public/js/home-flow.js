@@ -101,6 +101,10 @@ function homeOptions(data, extra = {}) {
     onDeleteData: async () => { await deleteMyData(); ctx.onSignOut(); },
     onDownload: () => downloadMyData(data.uid),
     onSignOut: ctx.onSignOut,
+    onSelfTest: () => showSelfReport(),
+    onWellbeing: () => showWellbeing(),
+    onPsychology: () => showPsychology(),
+    onOlder: ctx.onLegacyDashboard ? () => ctx.onLegacyDashboard() : null,
   };
 }
 
@@ -165,18 +169,7 @@ export async function showHome(extra = {}) {
   const data = await load();
   renderHome(ctx.el, homeOptions(data, extra));
   maybeNewQuestionsDialog(data);
-  // The psychology guide, and older sessions from before the new profile model, stay reachable.
-  ctx.el.insertAdjacentHTML('beforeend',
-    '<p style="text-align:center;margin:16px 0;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">'
-    + '<button class="btn btn-primary btn-sm" type="button" data-self>My personal profile</button>'
-    + '<button class="btn btn-ghost btn-sm" type="button" data-wellbeing>Private check-in</button>'
-    + '<button class="btn btn-ghost btn-sm" type="button" data-psych>Psychology guide</button>'
-    + (ctx.onLegacyDashboard ? '<button class="btn btn-ghost btn-sm" type="button" data-older>Older sessions</button>' : '')
-    + '</p>');
-  ctx.el.querySelector('[data-psych]')?.addEventListener('click', showPsychology);
-  ctx.el.querySelector('[data-self]')?.addEventListener('click', showSelfReport);
-  ctx.el.querySelector('[data-wellbeing]')?.addEventListener('click', showWellbeing);
-  ctx.el.querySelector('[data-older]')?.addEventListener('click', ctx.onLegacyDashboard);
+  // The self-test, the private check-in, the psychology guide and older sessions live on the Me tab.
 }
 
 function showEditor(bank) {
@@ -238,6 +231,9 @@ async function showPair(id) {
     onOpenResults: () => { window.scrollTo(0, 0); renderResults(ctx.el, { report, insights, myName: ctx.profile.display_name, partnerName: conn.partnerName, kind: bank, onLeave: () => showHome() }); },
     onShareCard: () => card,
     trend,
+    score: report.overall?.score ?? null,
+    band: report.overall?.band?.label ?? '',
+    bandBlurb: report.overall?.band?.blurb ?? '',
     talkFirst: talkFirst(report, insights),
     strongestWeakest: strongestAndWeakest(report),
     shareCard: card,

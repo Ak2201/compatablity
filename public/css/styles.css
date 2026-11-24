@@ -1,23 +1,27 @@
 /* Design tokens. Warm, calm palette. Dark mode via prefers-color-scheme or [data-theme]. */
 :root {
-  --bg: #fbf7f4;
+  --bg: #faf5f0;
   --surface: #ffffff;
-  --surface-2: #f5ece8;
-  --ink: #2b2226;
-  --ink-soft: #6b5c63;
-  --line: #eadfd9;
-  --accent: #b5476e;
+  --surface-2: #f4ece6;
+  --ink: #241a1f;
+  --ink-soft: #675860;
+  --ink-faint: #8e7f87;
+  --line: #e9ded7;
+  --accent: #b03f68;
   --accent-ink: #ffffff;
-  --accent-soft: #f7dfe7;
-  --sage: #4f7d6a;
+  --accent-soft: #f9e3eb;
+  --accent-deep: #6b2140;
+  --accent-deep-ink: #ffffff;
+  --accent-deep-soft: #f3b7cb;
+  --sage: #3a7560;
   --sage-soft: #dcebe3;
-  --warn: #a2641c;
-  --warn-soft: #f7ead3;
-  --radius: 18px;
-  --radius-sm: 12px;
-  --shadow: 0 10px 30px rgba(43, 34, 38, 0.08);
+  --warn: #955b12;
+  --warn-soft: #f7e9d3;
+  --radius: 22px;
+  --radius-sm: 14px;
+  --shadow: 0 1px 2px rgba(60, 30, 40, 0.05), 0 10px 30px rgba(60, 30, 40, 0.07);
   --gutter: 16px;
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font: "Manrope", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -31,6 +35,10 @@
     --accent: #e27a9d;
     --accent-ink: #1b1619;
     --accent-soft: #3d2530;
+    --ink-faint: #8f7f88;
+    --accent-deep: #4a1a30;
+    --accent-deep-ink: #f6eef1;
+    --accent-deep-soft: #f3b7cb;
     --sage: #8fc5ad;
     --sage-soft: #213a30;
     --warn: #e7b56c;
@@ -49,6 +57,10 @@
   --accent: #e27a9d;
   --accent-ink: #1b1619;
   --accent-soft: #3d2530;
+--ink-faint: #8f7f88;
+--accent-deep: #4a1a30;
+--accent-deep-ink: #f6eef1;
+--accent-deep-soft: #f3b7cb;
   --sage: #8fc5ad;
   --sage-soft: #213a30;
   --warn: #e7b56c;

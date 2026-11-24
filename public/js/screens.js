@@ -43,6 +43,16 @@ const ICON = {
   down: svg('<path d="M6 9.5l6 6 6-6"/>'),
   info: svg('<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5"/><path d="M12 7.8v.2"/>'),
   compare: svg('<path d="M4 7h13"/><path d="M14 4l3 3-3 3"/><path d="M20 17H7"/><path d="M10 14l-3 3 3 3"/>'),
+  heart: svg('<path d="M12 20c-5.2-3.6-8-6.6-8-10a4.3 4.3 0 0 1 8-2.3A4.3 4.3 0 0 1 20 10c0 3.4-2.8 6.4-8 10z"/>'),
+  friends: svg('<circle cx="8.5" cy="9" r="3.2"/><circle cx="15.5" cy="9" r="3.2"/><path d="M3 19.5c.6-3 2.7-4.7 5.5-4.7 1.4 0 2.6.4 3.5 1.2.9-.8 2.1-1.2 3.5-1.2 2.8 0 4.9 1.7 5.5 4.7"/>'),
+  chevron: svg('<path d="m9 6 6 6-6 6"/>'),
+  lock: svg('<rect x="5" y="10.5" width="14" height="9.5" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/>'),
+  signout: svg('<path d="M14 4.5h3A2.5 2.5 0 0 1 19.5 7v10a2.5 2.5 0 0 1-2.5 2.5h-3"/><path d="M4 12h10.5"/><path d="m10.5 8 4 4-4 4"/>'),
+  sparkle: svg('<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>'),
+  leaf: svg('<path d="M5 19c0-8 5-13 14-14-1 9-6 14-14 14z"/><path d="M5 19c3-4 6-7 10-10"/>'),
+  shield: svg('<path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6z"/>'),
+  book: svg('<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 18h16"/><path d="M8 7h8"/>'),
+  clock: svg('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),
 };
 
 const GENDER_WORD = { male: 'Man', female: 'Woman' };
@@ -59,12 +69,10 @@ const BANKS = {
   friendship: { title: 'Friendship answers', note: 'Used for your friendship rank.', questions: FRIEND_QUESTIONS, dimensions: FRIEND_DIMENSIONS },
 };
 
-function ring(score, tone, label) {
+function ring(score, tone, label, bare = false) {
   const s = clampScore(score);
-  const c = 2 * Math.PI * 32;
-  return `<span class="ds-ring ds-tone-${tone}" role="img" aria-label="${esc(label)}">
-    <svg viewBox="0 0 76 76" aria-hidden="true"><circle class="ds-ring-track" cx="38" cy="38" r="32"/><circle class="ds-ring-fill" cx="38" cy="38" r="32" stroke-dasharray="${(c * s / 100).toFixed(1)} ${c.toFixed(1)}"/></svg>
-    <b aria-hidden="true">${s}</b></span>`;
+  const aria = bare ? ' aria-hidden="true"' : ` role="img" aria-label="${esc(label)}"`;
+  return `<span class="ds-ring ds-tone-${tone}" style="--p:${s}"${aria}><b aria-hidden="true">${s}</b></span>`;
 }
 
 /* ---------- toast ---------- */
@@ -236,12 +244,17 @@ function rankRow(item, nameOf) {
       <button class="ds-rank-row ds-tone-${tone}${first ? ' is-first' : ''}" type="button" data-open="${esc(item.id)}"
         aria-label="${esc(`Rank ${item.rank}. ${name}. Score ${score} out of 100${band ? `. ${band}` : ''}. Open details`)}">
         <span class="ds-rank-badge" aria-hidden="true">${esc(item.rank)}</span>
+        ${first ? ring(score, tone, '', true) : `<span class="ds-avatar" aria-hidden="true">${esc(initial(name))}</span>`}
         <span class="ds-rank-main" aria-hidden="true">
-          <span class="ds-rank-name">${esc(name)}</span>
+          ${first
+            ? `<span class="ds-rank-first-line"><span class="ds-chip ds-chip-gold">1st</span><span class="ds-rank-name">${esc(name)}</span></span>`
+            : `<span class="ds-rank-name">${esc(name)}</span>`}
           <span class="ds-bar"><i style="width:${score}%"></i></span>
-          <span class="ds-rank-band">${band ? `<b>${esc(band)}</b>` : ''}${band && blurb ? '. ' : ''}${esc(blurb)}</span>
+          ${first && band ? `<span class="ds-chip ds-chip-${tone}">${esc(band)}</span>` : ''}
+          <span class="ds-rank-band">${esc(first ? blurb : band)}</span>
         </span>
-        <span class="ds-rank-score" aria-hidden="true">${score}<small>of 100</small></span>
+        <span class="ds-rank-score" aria-hidden="true">${score}</span>
+        <span class="ds-chev" aria-hidden="true">${ICON.chevron}</span>
       </button>
     </li>`;
 }
@@ -264,8 +277,12 @@ function rankSection(kind, items, shown, nameOf) {
   } else {
     bodyHtml = `<ol class="ds-rank" aria-label="${title}">${shown.map((it) => rankRow(it, nameOf)).join('')}</ol>`;
   }
-  return `<section class="ds-stack" aria-labelledby="ds-h-${kind}">
-    <div><h2 id="ds-h-${kind}">${title}</h2><p class="ds-section-note">${note}</p></div>
+  return `<section class="ds-stack ds-tone-${couple ? 'accent' : 'sage'}" aria-labelledby="ds-h-${kind}">
+    <div class="ds-section-row">
+      <span class="ds-section-ic" aria-hidden="true">${couple ? ICON.heart : ICON.friends}</span>
+      <div class="ds-grow"><h2 id="ds-h-${kind}">${title}</h2><p class="ds-section-note">${note}</p></div>
+      ${items.length ? `<span class="ds-chip">${items.length}</span>` : ''}
+    </div>
     ${bodyHtml}
   </section>`;
 }
@@ -376,7 +393,7 @@ export function renderHome(el, opts = {}) {
   const {
     profile, rankings, onInvite, onAccept, onShare, onOpenPair, onNickname, onCancelInvite,
     onEditProfile, onCompare, onNotifications, onMarkRead, onDeleteData, onSignOut,
-    onSnapshot, onDownload, answers,
+    onSnapshot, onDownload, answers, onSelfTest, onWellbeing, onPsychology, onOlder,
   } = opts;
   const name = clean(profile?.display_name);
   const couple = list(rankings?.couple);
@@ -398,6 +415,7 @@ export function renderHome(el, opts = {}) {
     <div class="ds ds-home">
       <header class="ds-header">
         <div class="ds-grow">
+          <p class="ds-eyebrow">Your space</p>
           <h1>${name ? `Hi, ${esc(name)}` : 'Hi there'}</h1>
           <p class="ds-header-sub" data-sub></p>
         </div>
@@ -463,34 +481,71 @@ export function renderHome(el, opts = {}) {
       </div>
 
       <div class="ds-panel ds-stack-lg" role="tabpanel" id="ds-panel-me" aria-labelledby="ds-tab-me" tabindex="0" hidden>
-        <section class="ds-card ds-me-head" aria-label="You">
+        <section class="ds-card ds-hero" aria-label="You">
           <span class="ds-avatar" aria-hidden="true">${esc(initial(name))}</span>
           <div class="ds-grow"><h2>${esc(name || 'You')}</h2>${genderWord(profile?.gender) ? `<p class="ds-soft">${esc(genderWord(profile?.gender))}</p>` : ''}</div>
         </section>
-        ${Object.keys(BANKS).map((bank) => {
-          const chip = STATUS_CHIP[status[bank]] || STATUS_CHIP.empty;
-          return `<section class="ds-card" aria-labelledby="ds-h-bank-${bank}">
-            <div class="ds-card-head">
-              <div><h2 id="ds-h-bank-${bank}">${BANKS[bank].title}</h2><p class="ds-section-note">${BANKS[bank].note}</p></div>
-              <span class="ds-chip${chip.tone ? ` ds-chip-${chip.tone}` : ''}">${chip.text}</span>
-            </div>
-            <div class="ds-bank-actions">
-              <button class="ds-btn ds-btn-primary" type="button" data-edit="${bank}">${status[bank] === 'empty' ? 'Start answering' : 'Edit answers'}<span class="ds-vh">, ${BANKS[bank].title}</span></button>
-              <button class="ds-btn ds-btn-quiet" type="button" data-snapshot="${bank}">Save a snapshot<span class="ds-vh">, ${BANKS[bank].title}</span></button>
-            </div>
-            <p class="ds-msg ds-msg-error" role="alert" data-bank-error></p>
-          </section>`;
-        }).join('')}
-        <section class="ds-card" aria-labelledby="ds-h-privacy">
-          <h2 id="ds-h-privacy">Privacy</h2>
-          <p class="ds-soft" style="margin-top:6px">You can stop sharing any connection at any time. When sharing is off, the other person cannot see how you match.</p>
-          <div class="ds-list-actions">
-            <button class="ds-btn ds-btn-quiet" type="button" data-download>Download my answers</button>
-            <button class="ds-btn ds-btn-danger" type="button" data-delete>Delete my data</button>
+
+        <section class="ds-stack" aria-labelledby="ds-h-answers">
+          <div><h2 id="ds-h-answers">Your answers</h2><p class="ds-section-note">Private until you share with someone.</p></div>
+          ${Object.keys(BANKS).map((bank) => {
+            const chip = STATUS_CHIP[status[bank]] || STATUS_CHIP.empty;
+            const scoredQs = BANKS[bank].questions.filter((q) => q.type !== 'text');
+            const doneCount = scoredQs.filter((q) => answers?.[bank]?.[q.id] !== undefined).length;
+            const pct = scoredQs.length ? Math.round((doneCount / scoredQs.length) * 100) : 0;
+            const verb = status[bank] === 'empty' ? 'Start answering' : status[bank] === 'partial' ? 'Continue answering' : 'Edit answers';
+            return `<section class="ds-card ds-bank ds-tone-${bank === 'couple' ? 'accent' : 'sage'}" aria-labelledby="ds-h-bank-${bank}">
+              <div class="ds-bank-head">
+                <span class="ds-section-ic" aria-hidden="true">${bank === 'couple' ? ICON.heart : ICON.friends}</span>
+                <div class="ds-grow"><h2 id="ds-h-bank-${bank}">${BANKS[bank].title}</h2><p class="ds-section-note">${BANKS[bank].questions.length} questions. ${BANKS[bank].note}</p></div>
+                <span class="ds-chip${chip.tone ? ` ds-chip-${chip.tone}` : ''}">${status[bank] === 'partial' ? `${doneCount} of ${scoredQs.length}` : chip.text}</span>
+              </div>
+              ${status[bank] === 'partial' ? `<span class="ds-bar" aria-hidden="true"><i style="width:${pct}%"></i></span>` : ''}
+              <div class="ds-bank-actions">
+                <button class="ds-btn ${status[bank] === 'done' ? 'ds-btn-quiet' : 'ds-btn-primary'} ds-btn-sm" type="button" data-edit="${bank}">${verb}<span class="ds-vh">, ${BANKS[bank].title}</span></button>
+                <button class="ds-btn ds-btn-plain ds-btn-sm" type="button" data-snapshot="${bank}">Save a snapshot<span class="ds-vh">, ${BANKS[bank].title}</span></button>
+              </div>
+              <p class="ds-msg ds-msg-error" role="alert" data-bank-error></p>
+            </section>`;
+          }).join('')}
+        </section>
+
+        <section class="ds-stack" aria-labelledby="ds-h-you">
+          <div><h2 id="ds-h-you">Just for you</h2><p class="ds-section-note">These never appear in anyone's comparison.</p></div>
+          <button class="ds-card ds-link-card ds-tone-plum" type="button" data-self>
+            <span class="ds-section-ic" aria-hidden="true">${ICON.sparkle}</span>
+            <span class="ds-grow"><h3>Self-test</h3><span class="ds-section-note">Your traits, strengths and where you could grow.</span>
+              ${Object.keys(answers?.self || {}).length ? '<span class="ds-chip ds-chip-plum" style="margin-top:8px">Started</span>' : ''}</span>
+            <span class="ds-chev" aria-hidden="true">${ICON.chevron}</span>
+          </button>
+          <button class="ds-card ds-link-card is-sage ds-tone-sage" type="button" data-wellbeing>
+            <span class="ds-section-ic" aria-hidden="true">${ICON.leaf}</span>
+            <span class="ds-grow"><h3>Wellbeing check-in</h3><span class="ds-section-note">How the last two weeks have felt. Stays with you.</span>
+              <span class="ds-chip ds-chip-sage" style="margin-top:8px">${ICON.lock} Only you can see this</span></span>
+            <span class="ds-chev" aria-hidden="true">${ICON.chevron}</span>
+          </button>
+          <button class="ds-card ds-link-card" type="button" data-psych>
+            <span class="ds-section-ic" aria-hidden="true">${ICON.book}</span>
+            <span class="ds-grow"><h3>Psychology guide</h3><span class="ds-section-note">Attachment, patterns and small things to try.</span></span>
+            <span class="ds-chev" aria-hidden="true">${ICON.chevron}</span>
+          </button>
+          ${typeof onOlder === 'function' ? `<button class="ds-card ds-card-flat ds-link-card" type="button" data-older>
+            <span class="ds-section-ic" aria-hidden="true" style="background:var(--surface)">${ICON.clock}</span>
+            <span class="ds-grow"><h3>Older sessions</h3><span class="ds-section-note">Two-person sessions from before connections.</span></span>
+            <span class="ds-chev" aria-hidden="true">${ICON.chevron}</span>
+          </button>` : ''}
+        </section>
+
+        <section class="ds-card ds-stack" aria-labelledby="ds-h-privacy">
+          <div class="ds-privacy-head">${ICON.shield}<h2 id="ds-h-privacy" style="font-size:19px">Privacy</h2></div>
+          <p class="ds-soft ds-small">You can stop sharing any connection at any time. When sharing is off, the other person cannot see how you match.</p>
+          <div class="ds-row">
+            <button class="ds-btn ds-btn-quiet ds-btn-sm ds-grow" type="button" data-download>Download my answers</button>
+            <button class="ds-btn ds-btn-danger ds-btn-sm ds-grow" type="button" data-delete>Delete my data</button>
           </div>
           <p class="ds-msg ds-msg-error" role="alert" data-privacy-error></p>
         </section>
-        <button class="ds-btn ds-btn-quiet ds-btn-block" type="button" data-signout>Sign out</button>
+        <button class="ds-btn ds-btn-plain ds-signout" type="button" data-signout>${ICON.signout} Sign out</button>
       </div>
     </div>`;
 
@@ -793,6 +848,10 @@ export function renderHome(el, opts = {}) {
     input.focus();
   });
   $('[data-signout]').addEventListener('click', () => call(onSignOut).catch((x) => toast(errorText(x))));
+  $('[data-self]').addEventListener('click', () => call(onSelfTest).catch((x) => toast(errorText(x))));
+  $('[data-wellbeing]').addEventListener('click', () => call(onWellbeing).catch((x) => toast(errorText(x))));
+  $('[data-psych]').addEventListener('click', () => call(onPsychology).catch((x) => toast(errorText(x))));
+  $('[data-older]')?.addEventListener('click', () => call(onOlder).catch((x) => toast(errorText(x))));
 
   paintHeader(); paintRanks(false); paintCode(); paintConns();
   selectTab(homeState.tab);
@@ -939,11 +998,17 @@ export function renderProfileEditor(el, { bank, answers, onSave, onBack, onSnaps
   el.innerHTML = `
     <div class="ds ds-editor">
       <div class="ds-edbar">
-        <div class="ds-edbar-top">
-          <button class="ds-btn ds-btn-plain ds-btn-sm ds-back" type="button" data-back>${ICON.back} Back</button>
-          <h1>${def.title}</h1>
+        <div class="ds-edbar-row">
+          <button class="ds-btn ds-btn-quiet ds-btn-sm ds-back" type="button" data-back>${ICON.back} Back</button>
+          <div class="ds-edbar-title">
+            <h1>${def.title}</h1>
+            <p><span data-total></span><span role="status" aria-live="polite" data-save></span></p>
+          </div>
+          <span class="ds-ring ds-ring-sm ds-tone-sage" style="--p:0" aria-hidden="true" data-total-ring><b data-total-pct>0%</b></span>
         </div>
-        <div class="ds-edbar-meta"><span data-total></span><span role="status" aria-live="polite" data-save></span></div>
+        <div class="ds-area-chips" role="group" aria-label="Jump to an area">
+          ${groups.map((g) => `<button class="ds-chip ds-chip-outline" type="button" data-jump="${esc(g.dim)}">${esc(g.meta.title)}</button>`).join('')}
+        </div>
         <div class="ds-bar ds-bar-thin ds-tone-sage" role="progressbar" aria-label="Questions answered" aria-valuemin="0" aria-valuemax="${total}" data-total-bar><i></i></div>
       </div>
       <p class="ds-soft" style="margin-bottom:var(--ds-4)">Answer for yourself, as you are now. Each answer is saved as you go. Choose “Not applicable” for anything that does not fit you.</p>
@@ -981,12 +1046,18 @@ export function renderProfileEditor(el, { bank, answers, onSave, onBack, onSnaps
     const bar = root.querySelector('[data-total-bar]');
     bar.setAttribute('aria-valuenow', String(done));
     bar.firstElementChild.style.width = `${total ? (done / total) * 100 : 0}%`;
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    root.querySelector('[data-total-ring]').style.setProperty('--p', String(pct));
+    root.querySelector('[data-total-pct]').textContent = `${pct}%`;
     groups.forEach((g) => {
       const node = root.querySelector(`[data-area="${CSS.escape(g.dim)}"]`);
       const d = doneIn(g.qs);
       node.querySelector('[data-area-count]').textContent = `${d} of ${g.qs.length}`;
       node.querySelector('[data-area-bar]').style.width = `${g.qs.length ? (d / g.qs.length) * 100 : 0}%`;
       node.classList.toggle('is-complete', d === g.qs.length);
+      const chip = root.querySelector(`[data-jump="${CSS.escape(g.dim)}"]`);
+      chip.classList.toggle('ds-chip-sage', d === g.qs.length);
+      chip.classList.toggle('ds-chip-outline', d !== g.qs.length);
     });
   }
 
@@ -1037,6 +1108,14 @@ export function renderProfileEditor(el, { bank, answers, onSave, onBack, onSnaps
   });
 
   root.querySelector('[data-back]').addEventListener('click', () => call(onBack).catch((x) => toast(errorText(x))));
+  root.querySelector('.ds-area-chips').addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-jump]');
+    if (!chip) return;
+    const node = root.querySelector(`[data-area="${CSS.escape(chip.dataset.jump)}"]`);
+    if (!node) return;
+    node.open = true;
+    node.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  });
   const snap = root.querySelector('[data-snap]');
   snap.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -1108,8 +1187,10 @@ function shareCardText(card) {
 export function renderPairDetail(el, opts = {}) {
   closeAllSheets();
   setStickyTop();
-  const { title, kindLabel, nickname, onBack, onOpenResults, onShareCard, trend, talkFirst, strongestWeakest, shareCard } = opts;
+  const { title, kindLabel, nickname, onBack, onOpenResults, onShareCard, trend, talkFirst, strongestWeakest, shareCard, score, band, bandBlurb } = opts;
   const name = clean(nickname) || clean(title) || 'This connection';
+  const hasName = !!(clean(nickname) || clean(title));
+  const scored = hasScore(score);
   const points = trendPoints(trend);
   const strongest = list(strongestWeakest?.strongest).map(areaItem).filter(Boolean);
   const weakest = list(strongestWeakest?.weakest).map(areaItem).filter(Boolean);
@@ -1120,14 +1201,32 @@ export function renderPairDetail(el, opts = {}) {
   el.innerHTML = `
     <div class="ds ds-pair ds-stack-lg">
       <header class="ds-stack">
-        <div><button class="ds-btn ds-btn-plain ds-btn-sm ds-back" type="button" data-back>${ICON.back} Back</button></div>
-        <div class="ds-row">
-          <h1>${esc(name)}</h1>
-          ${clean(kindLabel) ? `<span class="ds-chip ds-chip-accent">${esc(kindLabel)}</span>` : ''}
+        <div class="ds-row-between">
+          <button class="ds-btn ds-btn-quiet ds-btn-sm ds-back" type="button" data-back>${ICON.back} Back</button>
+          <button class="ds-btn ds-btn-quiet ds-btn-icon" type="button" data-share aria-label="Share a summary card">${ICON.share}</button>
         </div>
-        ${clean(nickname) && clean(title) && clean(nickname) !== clean(title) ? `<p class="ds-soft">${esc(title)}</p>` : ''}
-        <button class="ds-btn ds-btn-primary ds-btn-block" type="button" data-results>See full results</button>
+        <div>
+          <div class="ds-pair-kind">
+            ${clean(kindLabel) ? `<span class="ds-chip ds-chip-accent">${esc(kindLabel)}</span>` : ''}
+            <span class="ds-chip ds-chip-sage">Both sharing</span>
+          </div>
+          <h1 style="margin-top:8px">${hasName ? `You and ${esc(name)}` : esc(name)}</h1>
+          ${clean(nickname) && clean(title) && clean(nickname) !== clean(title) ? `<p class="ds-soft">${esc(title)}</p>` : ''}
+        </div>
       </header>
+
+      ${scored ? `
+      <section class="ds-card ds-hero ds-score-hero" aria-label="Score">
+        <div class="ds-score-hero-top">
+          ${ring(score, 'accent', `Score ${clampScore(score)} out of 100`)}
+          <div class="ds-grow ds-stack" style="gap:6px">
+            <p class="ds-eyebrow">Out of 100</p>
+            ${clean(band) ? `<h2>${esc(band)}</h2>` : ''}
+            ${clean(bandBlurb) ? `<p class="ds-soft ds-small">${esc(bandBlurb)}</p>` : ''}
+          </div>
+        </div>
+        <button class="ds-btn ds-btn-light ds-btn-block" type="button" data-results>See full results</button>
+      </section>` : '<button class="ds-btn ds-btn-primary ds-btn-block" type="button" data-results>See full results</button>'}
 
       <section class="ds-card ds-trend" aria-labelledby="ds-h-trend">
         <h2 id="ds-h-trend">Trend</h2>
@@ -1154,12 +1253,13 @@ export function renderPairDetail(el, opts = {}) {
 
       <button class="ds-btn ds-btn-quiet ds-btn-block" type="button" data-share>${ICON.share} Share a summary card</button>
       <p class="ds-msg ds-msg-error" role="alert" data-share-error></p>
+      <p class="ds-soft ds-small" style="text-align:center">A conversation tool, not a diagnosis or a prediction.</p>
     </div>`;
 
   const root = el.querySelector('.ds-pair');
   root.querySelector('[data-back]').addEventListener('click', () => call(onBack).catch((x) => toast(errorText(x))));
   root.querySelector('[data-results]').addEventListener('click', () => call(onOpenResults).catch((x) => toast(errorText(x))));
-  root.querySelector('[data-share]').addEventListener('click', async (e) => {
+  root.querySelectorAll('[data-share]').forEach((btn) => btn.addEventListener('click', async (e) => {
     // onShareCard may return fresh card text; otherwise the shareCard option is shown.
     const res = await run(e.currentTarget, root.querySelector('[data-share-error]'), () => call(onShareCard));
     if (!res.ok) return;
@@ -1175,7 +1275,7 @@ export function renderPairDetail(el, opts = {}) {
     const copy = sheet.body.querySelector('[data-copy]');
     copy?.addEventListener('click', () => copyText(text, 'Summary copied'));
     copy?.focus();
-  });
+  }));
 }
 
 /* =====================================================================

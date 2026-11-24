@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Screen preview (mock data)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../public/css/design.css">
+  <link rel="stylesheet" href="../public/css/styles.css">
+  <link rel="stylesheet" href="../public/css/reveal.css">
+  <link rel="stylesheet" href="../public/css/account.css">
+  <link rel="stylesheet" href="../public/css/dashboard.css">
+  <link rel="stylesheet" href="../public/css/compare.css">
+  <link rel="stylesheet" href="../public/css/self.css">
+  <link rel="stylesheet" href="../public/css/wellbeing.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">♡</span><span>Compatibility</span></div>
+    <div class="topbar-right"><span class="pill">Preview with mock data</span></div>
+  </header>
+  <main id="app" class="container"></main>
+  <footer class="footer">A conversation tool to help you talk, not a diagnosis or a prediction of success.</footer>
+  <script type="module">
+    // Renders the signed-in screens with made-up data so the UI can be checked without a backend.
+    // Open with ?screen=home|editor|pair  and optional &tab=rankings|people|me
+    import { renderHome, renderProfileEditor, renderPairDetail } from '../public/js/screens.js';
+    import { QUESTIONS } from '../public/js/questions.js';
+    const q = new URLSearchParams(location.search);
+    const el = document.getElementById('app');
+    const band = (key, label, blurb) => ({ key, label, blurb });
+    const strong = band('strong', 'Strongly aligned', 'Your answers line up on most of what matters.');
+    const good = band('good', 'Good alignment, a few things to talk through', 'Most areas agree. One or two need a conversation.');
+    const mixed = band('mixed', 'Mixed, with a lot to talk through', 'You see several things differently.');
+    const rankings = {
+      couple: [
+        { id: 'c1', partnerName: 'Priya', partnerGender: 'female', score: 82, band: strong, kind: 'couple', rank: 1, updatedAt: new Date().toISOString() },
+        { id: 'c2', partnerName: 'Daniel', partnerGender: 'male', score: 64, band: good, kind: 'couple', rank: 2, updatedAt: new Date().toISOString() },
+      ],
+      friendship: [
+        { id: 'c3', partnerName: 'Maya', score: 77, band: strong, kind: 'friendship', rank: 1 },
+        { id: 'c4', partnerName: 'Sam', score: 58, band: mixed, kind: 'friendship', rank: 2 },
+      ],
+    };
+    const connections = [
+      { id: 'c1', accepted: true, partnerName: 'Priya', partnerGender: 'female', myShare: true, partnerShare: true },
+      { id: 'c2', accepted: true, partnerName: 'Daniel', partnerGender: 'male', myShare: false, partnerShare: true },
+      { id: 'c5', accepted: false, code: 'R4T9XZ', message: 'Shall we try this together?', expiresAt: new Date(Date.now() + 12 * 864e5).toISOString() },
+    ];
+    const coupleAnswers = Object.fromEntries(QUESTIONS.filter((x) => x.type !== 'text').slice(0, 61).map((x) => [x.id, x.type === 'choice' ? x.options[0].value : 4]));
+    const common = {
+      profile: { display_name: 'Noor', gender: 'female', code: 'K7M2PQ' },
+      code: 'K7M2PQ', link: 'https://example.test/?join=K7M2PQ',
+      rankings, connections,
+      profileStatus: { couple: 'partial', friendship: 'empty' },
+      notifications: [{ id: 1, body: 'Daniel turned on sharing with you.', read: false }, { id: 2, body: 'Maya accepted your invite.', read: true }],
+      answers: { couple: coupleAnswers, friendship: {}, self: { a: 1 } },
+      onInvite: async () => ({ code: 'K7M2PQ', link: 'https://example.test/?join=K7M2PQ' }),
+      onAccept: async () => {}, onShare: async () => {}, onNickname: async () => {}, onCancelInvite: async () => {},
+      onOpenPair: () => { location.search = '?screen=pair'; },
+      onEditProfile: () => { location.search = '?screen=editor'; },
+      onSelfTest: () => {}, onWellbeing: () => {}, onPsychology: () => {}, onOlder: () => {},
+      onSignOut: () => {}, onMarkRead: async () => {}, onDeleteData: async () => {}, onSnapshot: async () => {},
+    };
+    const screen = q.get('screen') || 'home';
+    if (screen === 'editor') {
+      renderProfileEditor(el, { bank: 'couple', answers: coupleAnswers, onSave: async () => {}, onBack: () => { location.search = ''; }, onSnapshot: async () => {} });
+    } else if (screen === 'pair') {
+      renderPairDetail(el, {
+        title: 'Priya', kindLabel: 'Couple', score: 82, band: strong.label, bandBlurb: strong.blurb,
+        onBack: () => { location.search = ''; }, onOpenResults: () => {}, onShareCard: () => 'Noor and Priya: 82, strongly aligned.',
+        trend: { points: [{ score: 74, at: '2026-06-02' }, { score: 78, at: '2026-08-10' }, { score: 80, at: '2026-10-01' }, { score: 82, at: '2026-11-20' }] },
+        strongestWeakest: { strongest: [{ title: 'Values', score: 94 }, { title: 'Communication', score: 88 }, { title: 'Life goals', score: 86 }], weakest: [{ title: 'Money', score: 54 }, { title: 'Social energy', score: 61 }, { title: 'Conflict style', score: 66 }] },
+        talkFirst: [{ title: 'Money', why: 'One of you saves first and spends what is left. The other spends first.' }, { title: 'Conflict timing', why: 'You want to resolve things the same evening. Priya needs a night.' }],
+      });
+    } else {
+      renderHome(el, common);
+      const tab = q.get('tab');
+      if (tab) document.getElementById('ds-tab-' + tab)?.click();
+    }
+  </script>
+</body>
+</html>
