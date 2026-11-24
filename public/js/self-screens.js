@@ -24,6 +24,7 @@ const ICON = {
   back: svg('<path d="M14.5 5.5 8 12l6.5 6.5"/>'),
   down: svg('<path d="M6 9.5l6 6 6-6"/>'),
   info: svg('<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5"/><path d="M12 7.8v.2"/>'),
+  check: svg('<path d="m5 12.5 4.5 4.5L19 7.5"/>'),
 };
 
 let toastTimer = 0;
@@ -100,12 +101,18 @@ export function renderSelfEditor(el, { answers, onSave, onBack, onSnapshot } = {
   el.innerHTML = `
     <div class="ds ds-editor sf-editor">
       <div class="ds-edbar">
-        <div class="ds-edbar-top">
-          <button class="ds-btn ds-btn-plain ds-btn-sm ds-back" type="button" data-back>${ICON.back} Back</button>
-          <h1>About you</h1>
+        <div class="ds-edbar-row">
+          <button class="ds-btn ds-btn-quiet ds-btn-sm ds-back" type="button" data-back>${ICON.back} Back</button>
+          <div class="ds-edbar-title">
+            <h1>About you</h1>
+            <p><span data-total></span><span role="status" aria-live="polite" data-save></span></p>
+          </div>
+          <span class="ds-ring ds-ring-sm ds-tone-plum" style="--p:0" aria-hidden="true" data-total-ring><b data-total-pct>0%</b></span>
         </div>
-        <div class="ds-edbar-meta"><span data-total></span><span role="status" aria-live="polite" data-save></span></div>
-        <div class="ds-bar ds-bar-thin ds-tone-sage" role="progressbar" aria-label="Questions answered" aria-valuemin="0" aria-valuemax="${total}" data-total-bar><i></i></div>
+        <div class="ds-area-chips" role="group" aria-label="Jump to an area">
+          ${groups.map((g) => `<button class="ds-chip ds-chip-outline" type="button" data-jump="${esc(g.dim)}">${esc(g.meta.title || g.dim)}</button>`).join('')}
+        </div>
+        <div class="ds-bar ds-bar-thin ds-tone-plum" role="progressbar" aria-label="Questions answered" aria-valuemin="0" aria-valuemax="${total}" data-total-bar><i></i></div>
       </div>
       <p class="sf-intro">This is about you, not a partner. Answer honestly. Change any answer later.</p>
       <div class="ds-stack">
@@ -114,7 +121,7 @@ export function renderSelfEditor(el, { answers, onSave, onBack, onSnapshot } = {
             <summary>
               ${clean(g.meta.area) && clean(g.meta.area) !== clean(g.meta.title) ? `<span class="sf-eyebrow">${esc(g.meta.area)}</span>` : ''}
               <span class="ds-area-top"><span class="ds-area-title">${esc(g.meta.title || g.dim)}</span><span class="ds-area-count"><span data-area-count></span>${ICON.down}</span></span>
-              <span class="ds-bar ds-bar-thin ds-tone-sage" aria-hidden="true"><i data-area-bar></i></span>
+              <span class="ds-bar ds-bar-thin ds-tone-plum" aria-hidden="true"><i data-area-bar></i></span>
             </summary>
             <div class="ds-area-body">
               ${clean(g.meta.blurb) ? `<p class="ds-area-blurb">${esc(g.meta.blurb)}</p>` : ''}
@@ -145,14 +152,28 @@ export function renderSelfEditor(el, { answers, onSave, onBack, onSnapshot } = {
     const bar = root.querySelector('[data-total-bar]');
     bar.setAttribute('aria-valuenow', String(done));
     bar.firstElementChild.style.width = `${total ? (done / total) * 100 : 0}%`;
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    root.querySelector('[data-total-ring]').style.setProperty('--p', String(pct));
+    root.querySelector('[data-total-pct]').textContent = `${pct}%`;
     groups.forEach((g) => {
       const node = root.querySelector(`[data-area="${CSS.escape(g.dim)}"]`);
       const d = doneIn(g.qs);
       node.querySelector('[data-area-count]').textContent = `${d} of ${g.qs.length}`;
       node.querySelector('[data-area-bar]').style.width = `${g.qs.length ? (d / g.qs.length) * 100 : 0}%`;
       node.classList.toggle('is-complete', d === g.qs.length);
+      const chip = root.querySelector(`[data-jump="${CSS.escape(g.dim)}"]`);
+      chip.classList.toggle('ds-chip-plum', d === g.qs.length);
+      chip.classList.toggle('ds-chip-outline', d !== g.qs.length);
     });
   }
+  root.querySelector('.ds-area-chips').addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-jump]');
+    if (!chip) return;
+    const node = root.querySelector(`[data-area="${CSS.escape(chip.dataset.jump)}"]`);
+    if (!node) return;
+    node.open = true;
+    node.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  });
 
   // Every change is saved at once; only the latest save reports its result.
   let saveSeq = 0;
@@ -228,20 +249,29 @@ const basedOn = (ev) => {
   return c == null || c < 1 ? '' : `<p class="sf-evidence">Based on ${c} ${c === 1 ? 'answer' : 'answers'}</p>`;
 };
 
+// The two ends of each trait, shown under its meter. Neither end is better.
+const TRAIT_ENDS = {
+  openness: ['Practical', 'Exploring'],
+  conscientiousness: ['Spontaneous', 'Organised'],
+  extraversion: ['Reserved', 'Outgoing'],
+  agreeableness: ['Direct', 'Accommodating'],
+  emotional_steadiness: ['Feels it strongly', 'Composed'],
+};
+
 function traitCard(t) {
   const known = hasScore(t.score);
   const s = clampScore(t.score);
   const label = clean(t.label);
-  return `<article class="ds-card sf-trait">
+  const ends = TRAIT_ENDS[clean(t.key)] || ['0', '100'];
+  return `<div class="sf-trait">
     <div class="sf-trait-head">
       <h3>${esc(t.title)}</h3>
-      ${known ? `<span class="sf-score" aria-hidden="true">${s}<small>/100</small></span>` : ''}
+      ${known ? `<span class="sf-score" aria-hidden="true">${s}</span>` : '<span class="ds-chip">Not enough answers yet</span>'}
     </div>
-    ${meter(t.score, known ? `${clean(t.title)}: ${s} out of 100${label ? `, ${label}` : ''}` : `${clean(t.title)}: not enough answers yet`)}
-    <div class="sf-scale" aria-hidden="true"><span>0</span><span>50</span><span>100</span></div>
-    ${label || !known ? `<p><span class="ds-chip ds-chip-accent">${esc(known ? label : 'Not enough answers yet')}</span></p>` : ''}
+    ${meter(t.score, known ? `${clean(t.title)}: ${s} out of 100${label ? `, ${label}` : ''}` : `${clean(t.title)}: not enough answers yet`, { tone: 'plum' })}
+    <div class="sf-scale" aria-hidden="true"><span>${esc(ends[0])}</span>${known && label ? `<span class="sf-trait-label">${esc(label)}</span>` : ''}<span>${esc(ends[1])}</span></div>
     ${clean(t.blurb) ? `<p class="sf-blurb">${esc(t.blurb)}</p>` : ''}
-  </article>`;
+  </div>`;
 }
 
 function facetGroups(traits, facets) {
@@ -362,7 +392,7 @@ export function renderSelfReport(el, { profile, name, onBack, onEdit, connection
       ${traits.length ? `
       <section class="ds-stack" aria-labelledby="sf-h-traits">
         <div><h2 id="sf-h-traits">Your traits</h2><p class="ds-section-note">Where you sit on each one, from 0 to 100. Neither end is better.</p></div>
-        ${traits.map(traitCard).join('')}
+        <div class="ds-card sf-traits">${traits.map(traitCard).join('')}</div>
         ${facetGroups(traits, facets)}
       </section>` : ''}
 
@@ -370,7 +400,7 @@ export function renderSelfReport(el, { profile, name, onBack, onEdit, connection
       <section class="ds-stack" aria-labelledby="sf-h-strengths">
         <h2 id="sf-h-strengths">Your strengths</h2>
         <div class="sf-grid">
-          ${strengths.map((s) => `<article class="ds-card sf-strength"><h3>${esc(s.title)}</h3>${clean(s.text) ? `<p>${esc(s.text)}</p>` : ''}${basedOn(s.evidence)}</article>`).join('')}
+          ${strengths.map((s) => `<article class="ds-card sf-strength"><span class="sf-strength-ic" aria-hidden="true">${ICON.check}</span><h3>${esc(s.title)}</h3>${clean(s.text) ? `<p>${esc(s.text)}</p>` : ''}${basedOn(s.evidence)}</article>`).join('')}
         </div>
       </section>` : ''}
 

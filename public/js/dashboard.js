@@ -159,15 +159,22 @@ export function renderDashboard(el, opts = {}) {
     const toneName = BAND_TONE[band.key] || scoreTone(value);
     const summary = str(ins.summary) || str(band.blurb);
     const caution = str(ins.cautionNote) || 'A conversation tool, not a diagnosis or a prediction of success.';
-    return `<section class="card rv-hero db-hero" style="--i:0">
-      <div class="area-tag">Your results</div>
-      <div class="people" aria-hidden="true">
-        <span class="avatar on">${esc(initial(me))}</span><span class="link-dot"></span><span class="avatar on rv-them">${esc(initial(them))}</span>
+    const ringHtml = value === null
+      ? '<span class="ds-ring db-ring" style="--p:0" role="img" aria-label="Overall alignment: no score"><b>–</b></span>'
+      : `<span class="ds-ring db-ring" style="--p:${value}" role="img" aria-label="${esc(`Overall alignment: ${value} out of 100`)}"><b><span data-db-count="${value}">${value}</span></b></span>`;
+    return `<header class="db-top">
+      <p class="db-eyebrow">${friendship ? 'Friendship results' : 'Your results'}</p>
+      <h1 class="db-title" tabindex="-1">${esc(me)} <span class="db-amp" aria-hidden="true">&amp;</span><span class="rv-vh"> and </span> ${esc(them)}</h1>
+    </header>
+    <section class="card db-hero rv-tone-${toneName}" style="--i:0" aria-label="Overall alignment">
+      <div class="db-hero-top">
+        ${ringHtml}
+        <div class="db-hero-text">
+          <p class="db-hero-kicker">Out of 100</p>
+          ${str(band.label) ? `<h2 class="db-hero-band">${esc(band.label)}</h2>` : ''}
+          ${summary ? `<p class="db-summary">${esc(summary)}</p>` : ''}
+        </div>
       </div>
-      <h1 tabindex="-1">${esc(me)} &amp; ${esc(them)}</h1>
-      ${ring(overall.score, toneName, 'Overall alignment', 'aligned')}
-      ${str(band.label) ? `<p class="rv-band rv-tone-${toneName}">${esc(band.label)}</p>` : ''}
-      ${summary ? `<p class="db-summary">${esc(summary)}</p>` : ''}
       <p class="db-caution">${esc(caution)}</p>
     </section>`;
   }

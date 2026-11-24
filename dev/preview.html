@@ -25,9 +25,17 @@
   <footer class="footer">A conversation tool to help you talk, not a diagnosis or a prediction of success.</footer>
   <script type="module">
     // Renders the signed-in screens with made-up data so the UI can be checked without a backend.
-    // Open with ?screen=home|editor|pair  and optional &tab=rankings|people|me
+    // Open with ?screen=home|editor|pair|results|self|self-editor|wellbeing|wellbeing-editor  and optional &tab=rankings|people|me
     import { renderHome, renderProfileEditor, renderPairDetail } from '../public/js/screens.js';
     import { QUESTIONS } from '../public/js/questions.js';
+    import { renderDashboard } from '../public/js/dashboard.js';
+    import { computeReport } from '../public/js/psychology.js';
+    import { buildInsights } from '../public/js/insights.js';
+    import { renderSelfReport, renderSelfEditor } from '../public/js/self-screens.js';
+    import { selfProfile, compareSelf } from '../public/js/self-profile.js';
+    import { SELF_QUESTIONS } from '../public/js/self-questions.js';
+    import { renderWellbeingView, renderWellbeingEditor } from '../public/js/wellbeing-screens.js';
+    import { WELLBEING_QUESTIONS } from '../public/js/wellbeing-questions.js';
     const q = new URLSearchParams(location.search);
     const el = document.getElementById('app');
     const band = (key, label, blurb) => ({ key, label, blurb });
@@ -64,8 +72,40 @@
       onSelfTest: () => {}, onWellbeing: () => {}, onPsychology: () => {}, onOlder: () => {},
       onSignOut: () => {}, onMarkRead: async () => {}, onDeleteData: async () => {}, onSnapshot: async () => {},
     };
+    // Synthetic answers: deterministic, spread across the scale, with a few disagreements.
+    const fill = (qs, shift) => Object.fromEntries(qs.filter((x) => x.type !== 'text').map((x, i) => {
+      const k = i * 7 + shift;
+      if (x.type === 'choice') return [x.id, x.options[k % x.options.length].value];
+      if (x.type === 'dealbreaker') return [x.id, k % 3 ? 'no' : 'yes'];
+      return [x.id, 1 + (k % 5)];
+    }));
+    const texts = (qs, who) => Object.fromEntries(qs.filter((x) => x.type === 'text').map((x) => [x.id, `${who}: a few honest words about this.`]));
+    const mineC = { ...fill(QUESTIONS, 0), ...texts(QUESTIONS, 'Noor') };
+    const theirsC = { ...fill(QUESTIONS, 2), ...texts(QUESTIONS, 'Priya') };
     const screen = q.get('screen') || 'home';
-    if (screen === 'editor') {
+    const back = () => { location.search = ''; };
+    if (screen === 'results') {
+      const report = computeReport(mineC, theirsC, { myRole: 'A', myName: 'Noor', partnerName: 'Priya' });
+      const insights = buildInsights(mineC, theirsC, report, { kind: 'couple', myName: 'Noor', partnerName: 'Priya' });
+      renderDashboard(el, { report, insights, myName: 'Noor', partnerName: 'Priya', kind: 'couple', onLeave: back });
+    } else if (screen === 'self') {
+      const mineS = fill(SELF_QUESTIONS, 0);
+      const theirsS = fill(SELF_QUESTIONS, 3);
+      renderSelfReport(el, {
+        profile: selfProfile(mineS), name: 'Noor', onBack: back, onEdit: () => { location.search = '?screen=self-editor'; },
+        connections: [
+          { id: 'c1', name: 'Priya', kindLabel: 'Couple', compare: compareSelf(mineS, theirsS, { partnerName: 'Priya' }) },
+          { id: 'c3', name: 'Maya', kindLabel: 'Friendship', compare: 'not_shared' },
+        ],
+      });
+    } else if (screen === 'self-editor') {
+      renderSelfEditor(el, { answers: fill(SELF_QUESTIONS.slice(0, 14), 0), onSave: async () => {}, onBack: back, onSnapshot: async () => {} });
+    } else if (screen === 'wellbeing') {
+      const w = Object.fromEntries(WELLBEING_QUESTIONS.map((x, i) => [x.id, x.options ? x.options[Math.min(x.type === 'choice' ? 0 : 1 + (i % 2), x.options.length - 1)].value : 2 + (i % 3)]));
+      renderWellbeingView(el, { answers: w, onBack: back, onEdit: () => { location.search = '?screen=wellbeing-editor'; } });
+    } else if (screen === 'wellbeing-editor') {
+      renderWellbeingEditor(el, { answers: {}, onSave: async () => {}, onBack: back });
+    } else if (screen === 'editor') {
       renderProfileEditor(el, { bank: 'couple', answers: coupleAnswers, onSave: async () => {}, onBack: () => { location.search = ''; }, onSnapshot: async () => {} });
     } else if (screen === 'pair') {
       renderPairDetail(el, {

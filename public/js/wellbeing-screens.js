@@ -111,11 +111,17 @@ export function renderWellbeingEditor(el, { answers, onSave, onBack } = {}) {
   el.innerHTML = `
     <div class="ds ds-editor wb wb-editor">
       <div class="ds-edbar">
-        <div class="ds-edbar-top">
-          <button class="ds-btn ds-btn-plain ds-btn-sm ds-back" type="button" data-back>${ICON.back} Back</button>
-          <h1>Wellbeing check-in</h1>
+        <div class="ds-edbar-row">
+          <button class="ds-btn ds-btn-quiet ds-btn-sm ds-back" type="button" data-back>${ICON.back} Back</button>
+          <div class="ds-edbar-title">
+            <h1>Wellbeing check-in</h1>
+            <p><span data-total></span><span role="status" aria-live="polite" data-save></span></p>
+          </div>
+          <span class="ds-ring ds-ring-sm ds-tone-sage" style="--p:0" aria-hidden="true" data-total-ring><b data-total-pct>0%</b></span>
         </div>
-        <div class="ds-edbar-meta"><span data-total></span><span role="status" aria-live="polite" data-save></span></div>
+        ${groups.length ? `<div class="ds-area-chips" role="group" aria-label="Jump to an area">
+          ${groups.map((g) => `<button class="ds-chip ds-chip-outline" type="button" data-jump="${esc(g.dim)}">${esc(g.meta.title || g.dim)}</button>`).join('')}
+        </div>` : ''}
         <div class="ds-bar ds-bar-thin ds-tone-sage" role="progressbar" aria-label="Questions answered" aria-valuemin="0" aria-valuemax="${total}" data-total-bar><i></i></div>
       </div>
       <div class="wb-head">
@@ -149,14 +155,28 @@ export function renderWellbeingEditor(el, { answers, onSave, onBack } = {}) {
     const bar = root.querySelector('[data-total-bar]');
     bar.setAttribute('aria-valuenow', String(done));
     bar.firstElementChild.style.width = `${total ? (done / total) * 100 : 0}%`;
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    root.querySelector('[data-total-ring]').style.setProperty('--p', String(pct));
+    root.querySelector('[data-total-pct]').textContent = `${pct}%`;
     groups.forEach((g) => {
       const node = root.querySelector(`[data-area="${CSS.escape(g.dim)}"]`);
       const d = doneIn(g.qs);
       node.querySelector('[data-area-count]').textContent = `${d} of ${g.qs.length}`;
       node.querySelector('[data-area-bar]').style.width = `${g.qs.length ? (d / g.qs.length) * 100 : 0}%`;
       node.classList.toggle('is-complete', d === g.qs.length);
+      const chip = root.querySelector(`[data-jump="${CSS.escape(g.dim)}"]`);
+      chip?.classList.toggle('ds-chip-sage', d === g.qs.length);
+      chip?.classList.toggle('ds-chip-outline', d !== g.qs.length);
     });
   }
+  root.querySelector('.ds-area-chips')?.addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-jump]');
+    if (!chip) return;
+    const node = root.querySelector(`[data-area="${CSS.escape(chip.dataset.jump)}"]`);
+    if (!node) return;
+    node.open = true;
+    node.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  });
 
   // Every change is saved at once; only the latest save reports its result.
   let saveSeq = 0;
@@ -237,11 +257,14 @@ export function renderWellbeingView(el, { answers, onBack, onEdit } = {}) {
     <div class="ds wb wb-view ds-stack-lg">
       ${safetyCard(s.flags && s.flags.safety)}
       <header class="ds-stack">
-        <div><button class="ds-btn ds-btn-plain ds-btn-sm ds-back" type="button" data-back>${ICON.back} Back</button></div>
-        <div class="ds-card ds-welcome wb-hero">
+        <div class="ds-row-between">
+          <button class="ds-btn ds-btn-quiet ds-btn-sm ds-back" type="button" data-back>${ICON.back} Back</button>
+          <span class="ds-chip ds-chip-sage wb-only">${ICON.lock} Only you can see this</span>
+        </div>
+        <div class="ds-card wb-hero">
           <p class="wb-eyebrow">Wellbeing check-in · Last two weeks</p>
           <h1>${esc(headline)}</h1>
-          ${LEVEL[s.level] ? `<p>${levelChip(s.level)}</p>` : ''}
+          ${LEVEL[s.level] ? `<p class="wb-level-row">${levelChip(s.level)}${total ? `<span class="ds-small ds-soft">${answered} of ${total} answered</span>` : ''}</p>` : ''}
           ${text ? `<p class="wb-lead">${esc(text)}</p>` : ''}
           ${privacyNote()}
         </div>
