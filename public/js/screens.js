@@ -637,11 +637,14 @@ export function renderHome(el, opts = {}) {
   $('[data-copy-code]').addEventListener('click', () => copyText(myCode, 'Code copied'));
   $('[data-copy-link]').addEventListener('click', () => copyText(myLink, 'Link copied'));
   $('[data-share-code]').addEventListener('click', async () => {
-    const text = `Connect with me on Compatibility. My code is ${myCode}.${myLink ? ` Or open ${myLink}` : ''}`;
+    // Share the link. Opening it signs the person in, then shows the accept page with your name.
+    const text = myLink
+      ? `Connect with me on Compatibility. Open this link to accept my invite: ${myLink}`
+      : `Connect with me on Compatibility. My code is ${myCode}.`;
     if (navigator.share) {
-      try { await navigator.share({ title: 'My Compatibility code', text }); } catch { /* closed by the person */ }
+      try { await navigator.share({ title: 'Connect on Compatibility', text, url: myLink || undefined }); } catch { /* closed by the person */ }
     } else {
-      copyText(text, 'Invite text copied');
+      copyText(text, 'Invite link copied');
     }
   });
 

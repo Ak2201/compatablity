@@ -5,7 +5,7 @@ import { FRIEND_QUESTIONS } from './friend-questions.js';
 import { currentUid } from './supabase.js';
 import { renderHome, renderProfileEditor, renderPairDetail, renderPsychology, renderCompareSheet } from './screens.js';
 import { renderDashboard as renderResults } from './dashboard.js';
-import { loadMyProfileAnswers, saveMyProfileAnswers, acceptInvite, setSharing, getConnectionAnswers,
+import { loadMyProfileAnswers, saveMyProfileAnswers, acceptInvite, previewInvite, setSharing, getConnectionAnswers,
   computePair, buildRankings } from './connections.js';
 import { codeFromText, createInviteWithMessage, cancelInvite, setNickname, listConnectionsV2,
   saveSnapshot, listSnapshots, listNotifications, markAllNotificationsRead, deleteMyData, downloadMyData } from './features.js';
@@ -74,6 +74,11 @@ function homeOptions(data, extra = {}) {
     notifications: data.notifications,
     answers: data.mine,
     ...extra,
+    // The Share button sends this link. A new person opens it, signs in, and lands on the accept page.
+    link: extra.link || (() => {
+      const code = extra.code || data.conns.find((c) => !c.accepted && c.code)?.code || null;
+      return code ? inviteLink(code) : undefined;
+    })(),
     onInvite: async (message) => {
       const inv = await createInviteWithMessage(message);
       await showHome({ code: inv.code });
@@ -351,15 +356,61 @@ function showCompare(data) {
 // Entry point from the app, after sign-in and profile are ready.
 export async function startHome(el, options) {
   ctx = { el, ...options };
-  if (options.pendingCode) {
-    try {
-      await acceptInvite(options.pendingCode);
-    } catch (err) {
-      if (err.code === 'app/not-found' && options.onLegacyJoin) return options.onLegacyJoin(options.pendingCode);
-      console.error(err);
-    }
-  }
+  if (options.pendingCode) return showAcceptPage(options.pendingCode);
   return showHome();
 }
+
+// The page a new person lands on after signing in from an invite link: who invited them, then Accept.
+async function showAcceptPage(code) {
+  navRoot('accept', () => showAcceptPage(code));
+  let preview;
+  try {
+    preview = await previewInvite(code);
+  } catch (err) {
+    console.error(err);
+    return showHome();
+  }
+  if (!preview) {
+    // Not a connection code: it may be an older session code.
+    if (ctx.onLegacyJoin) return ctx.onLegacyJoin(code);
+    return showHome();
+  }
+  if (preview.isMember) return showHome();
+  const host = preview.hostName || 'Someone';
+  const full = preview.isFull;
+  ctx.el.innerHTML = `
+    <section class="card hero">
+      <div class="heart" aria-hidden="true">♡</div>
+      <h1>${esc(host)} invited you</h1>
+      <p class="lead">${full
+        ? 'This invite has already been used by someone else. Ask for a new invite.'
+        : 'Accept to connect. You will each keep your own answers, and you choose what to share.'}</p>
+      <p class="ref-note" id="accept-note" role="status" aria-live="polite"></p>
+      <div class="btn-row stack">
+        ${full ? '' : '<button class="btn btn-primary" id="accept-invite" type="button">Accept invite</button>'}
+        <button class="btn btn-ghost" id="accept-later" type="button">Not now</button>
+      </div>
+    </section>`;
+  ctx.el.querySelector('#accept-later').addEventListener('click', () => showHome());
+  const accept = ctx.el.querySelector('#accept-invite');
+  accept?.addEventListener('click', async () => {
+    accept.disabled = true;
+    accept.textContent = 'Accepting…';
+    try {
+      await acceptInvite(code);
+      await showHome();
+    } catch (err) {
+      console.error(err);
+      accept.disabled = false;
+      accept.textContent = 'Accept invite';
+      ctx.el.querySelector('#accept-note').textContent = friendlyError(err);
+    }
+  });
+}
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// The shareable link for one of your codes.
+const inviteLink = (code) => `${location.origin}${location.pathname}?join=${code}`;
 
 export { showPsychology };
